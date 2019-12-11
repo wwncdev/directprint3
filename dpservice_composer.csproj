@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Cognex.Dataman.SDK.PC">
+      <HintPath>Cognex.Dataman.SDK.PC.dll</HintPath>
+    </Reference>
+    <Reference Include="EasyModbus">
+      <HintPath>EasyModbus.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="System.IO.Ports" Version="4.7.0" />
+    <PackageReference Include="System.ComponentModel.EventBasedAsync" Version="4.3.0" />
+  </ItemGroup>
+</Project>
