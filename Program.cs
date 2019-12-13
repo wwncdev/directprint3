@@ -1,4 +1,5 @@
 ﻿using System;
+using SpeechLib;
 using System.IO;
 using System.Diagnostics;
 using System.Net;
@@ -20,10 +21,46 @@ namespace dpservice_composer
         {
             // monitor for job file
             // read in job file
-
-            JobSpoolSVC.Start();
-            Console.WriteLine("Hello World!");
-            Console.ReadKey();
+            if (false)
+            {
+                Console.WriteLine("Using DPSys");
+                var dpsys = new DPsys();
+                Console.ReadLine();
+            }
+            else
+            {
+                JobSpoolSVC.Start();
+                JobSpoolSVC.watchSpool();
+                while (!(Console.KeyAvailable))
+                {
+                    // if this isn't very performant or takes a high percent of CPU then add some sleep time
+                    // to allow thread to go process other things.
+                    if (JobSpoolSVC.status == "needs_processing")
+                    {
+                        System.Threading.Thread.Sleep(10);
+                        if (!BarcodeScanner.initialized)
+                        {
+                            BarcodeScanner.Start();
+                            // test with a few barcodes
+                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
+                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
+                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
+                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
+                        }
+                        BarcodeScanner.WatchForBarcode();
+                        if (BarcodeScanner.barcodes.Count > 0)
+                        {
+                            var barcode = BarcodeScanner.barcodes.Dequeue();
+                            var itemToProcess = JobSpoolSVC.getItemIndex(barcode);
+                        }
+                    }
+                    else
+                    {
+                        System.Threading.Thread.Sleep(500);
+                        JobSpoolSVC.watchSpool();
+                    }
+                }
+            }
         }
 
     }
@@ -31,40 +68,55 @@ namespace dpservice_composer
     static class JobSpoolSVC
     {
         static Timer aTimer;
-        const string jobfiledir=@"c:/jobfiles/";
+        public static string status = "starting";
+        const string jobfiledir = @"c:/jobfiles/";
         static String spooldir;
         static String processdir;
         static String archivedir;
         public static JToken job;
-        static DPsys dpsys;
-        public static Dictionary<string,List <int>> tag2items = new Dictionary<string,List <int>>();
-            public static void Start()
+        static SpVoice voice;
+
+        //static DPsys dpsys;
+        public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();
+        public static void Start()
         {
             spooldir = jobfiledir + "spooled/";
             processdir = jobfiledir + "processing/";
             archivedir = jobfiledir + "archive/";
 
+            voice = new SpVoice();
+            voice.Volume = 100;
+
+            voice.Speak("Welcome to the direct print project", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+
+
+
             // start by cleaning out the directory
             string[] fileEntries = Directory.GetFiles(spooldir);
-            foreach(string fileName in fileEntries) File.Delete(fileName);
+            foreach (string fileName in fileEntries) File.Delete(fileName);
 
             aTimer = new Timer(200);
             aTimer.Elapsed += CheckSpoolDirEvent;
             aTimer.AutoReset = true;
+            //            aTimer.Enabled = true;
+            status = "started";
+        }
+
+        public static void watchSpool()
+        {
             aTimer.Enabled = true;
-            Console.WriteLine("Started...");
         }
 
         private static void CheckSpoolDirEvent(Object source, ElapsedEventArgs e)
         {
-            string[] fileEntries = Directory.GetFiles(spooldir,@"*.json");
+            string[] fileEntries = Directory.GetFiles(spooldir, @"*.json");
             if (fileEntries.Length > 0)
             {
                 aTimer.Enabled = false;
 
                 // get rid of old processing file if it already exists
                 if (File.Exists(processdir + Path.GetFileName(fileEntries[0]))) File.Delete(processdir + Path.GetFileName(fileEntries[0]));
-                
+
                 // move file from spooled to processing
                 File.Move(spooldir + Path.GetFileName(fileEntries[0]), processdir + Path.GetFileName(fileEntries[0]));
                 using (StreamReader r = new StreamReader(processdir + Path.GetFileName(fileEntries[0])))
@@ -73,36 +125,162 @@ namespace dpservice_composer
                     job = JToken.Parse(json);
 
                     // now add an lookup from tagkey to item
-                    JArray items = (JArray) job["incomplete_items"];
-                    foreach( JToken item in items)
+                    JArray items = (JArray)job["incomplete_items"];
+                    foreach (JToken item in items)
                     {
-                        foreach(string tag in item["tagkeys"])
+                        foreach (string tag in item["tagkeys"])
                         {
-                            if (!tag2items.ContainsKey(tag))
-                            {
-                                tag2items[tag] = new List<int>();
-                            }
+                            if (!tag2items.ContainsKey(tag)) tag2items[tag] = new List<int>();
                             tag2items[tag].Add(items.IndexOf(item));
                         }
                     }
-                    foreach(var ndexs in tag2items)
-                    {
-                        Console.Write(ndexs.Key+":");
-                        foreach(int ndex in ndexs.Value)
-                        {
-                            Console.Write(ndex.ToString()+",");
-                            Console.Write(items[ndex]["item_description"]);
-                        }
-                        Console.WriteLine("*");
-                    }
-                    //dpsys = new DPsys(job);
-                    //   incompleteItems = ((JArray)job["incomplete_items"]);
+                    voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+                    status = "needs_processing";
                 }
+            }
+        }
 
+        public static int getItemIndex(string barcode)
+        {
+            // use barcode to find incomplete item in list
+            if (tag2items.ContainsKey(barcode))
+            {
+                var index = tag2items[barcode][0];
+                Console.WriteLine(job["incomplete_items"][index]["item_description"]);
+                int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
+                qty--;
+                job["incomplete_items"][index]["notprintedqty"] = qty;
+                if (qty <= 0)
+                {
+                    JArray completed_items = (JArray)job["completed_items"];
+                    completed_items.Add(job["incomplete_items"][index]);
+                    JArray incomplete_items = (JArray)job["incomplete_items"];
+                    tag2items[barcode].Remove(index);
+                    if (tag2items[barcode].Count == 0) tag2items.Remove(barcode);
+                    //                    incomplete_items[index].Remove();
+                    Console.WriteLine(incomplete_items.Count.ToString() + " items to go");
+                    Console.WriteLine("Line Item " + index.ToString() + " completed");
+                }
+                return index;
+            }
+            else
+            {
+                Console.WriteLine(barcode + " no qty left to print");
+                return -1;
             }
         }
     }
 
+
+        /**************************************************************
+         * if edge detector says there is a tag then "pull the trigger" on the barcode scanner.
+         * 
+         */
+    public static class BarcodeScanner
+    {
+        static string BarcodeData;
+        static ModbusClient modbusClient;
+        static IPAddress ip_BarcodeReader1;
+        static public DataManSystem BarcodeReader1;
+        static bool SensorInitialized;
+        static bool PreviousSensorState;
+        public static Queue<string> barcodes;
+        public static bool initialized = false;
+        public static void Start()
+        {
+            barcodes = new Queue<string>();
+            IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
+            EthSystemConnector conn_BarcodeReader1 = new EthSystemConnector(ip_BarcodeReader1);
+
+            BarcodeReader1 = new DataManSystem(conn_BarcodeReader1);
+            //subscribe to Cognex barcode reader "string arrived" event
+
+            BarcodeReader1.ReadStringArrived += new ReadStringArrivedHandler(BarcodeReader1_ReadStringArrived);
+            //create Modbus object to monitor edge detection sensor on the Protos X I/O board
+            modbusClient = new ModbusClient("192.168.16.45", 502);
+            //open connection to Protos X and get current state of sensor
+            while (modbusClient.Connected) modbusClient.Disconnect();
+            modbusClient.Connect();
+            System.Threading.Thread.Sleep(500);
+            if (modbusClient.Connected)
+            {
+                bool[] readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
+                //           modbusClient.Disconnect();
+
+                PreviousSensorState = readSensorInput[0];
+
+                //sensor is initialized if there is no tag under the sensor when the timer is started
+                PreviousSensorState = (!SensorInitialized);
+
+            }
+
+            //open connection to barcode reader
+            BarcodeReader1.Connect();
+            BarcodeReader1.SetResultTypes(ResultTypes.ReadString);
+            initialized = true;
+        }
+        private static void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
+        {
+            if (BarcodeData == null)
+            {
+                BarcodeData = args.ReadString.ToString();
+            }
+        }
+
+        public static void WatchForBarcode() // you were missing a return type. I've added void for now
+        {
+            //a sensor state of true = over a tag
+            bool CurrentSensorState;
+            if (!modbusClient.Connected) modbusClient.Connect();
+            bool[] readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
+            CurrentSensorState = readSensorInput[0];
+
+            //do nothing if the sensor state has not changed
+            if (CurrentSensorState == PreviousSensorState)
+            {
+                return;
+            }
+            else
+            {
+                PreviousSensorState = CurrentSensorState;
+            }
+
+            //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
+            //then the sensor will be initialized the first time it is over a gap
+            if (SensorInitialized == false & CurrentSensorState == false)
+            {
+                SensorInitialized = true;
+            }
+            else if (SensorInitialized == true & CurrentSensorState == true)
+            {
+                BarcodeData = null;
+                if (BarcodeReader1.State == ConnectionState.Connected)
+                    BarcodeReader1.SendCommand("TRIGGER ON");
+            }
+            else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
+            {
+                if (BarcodeReader1.State == ConnectionState.Connected)
+                    BarcodeReader1.SendCommand("TRIGGER OFF");
+
+                if (BarcodeData != null)
+                {
+                    //Console.WriteLine(BarcodeData.ToString());// emit to console
+                    barcodes.Enqueue(BarcodeData);
+                }
+            }
+        }
+
+        private static void MonitorEdgeSensor_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            if (e.Error != null)
+            {
+                //ProgramStatus.Text = e.Error.Message;
+                Console.WriteLine(e.Error.Message);
+            }
+        }
+
+
+    }
 
     class DPsys
     {
@@ -119,14 +297,8 @@ namespace dpservice_composer
 
        
 
-        public DPsys(JToken job)
+        public DPsys()
         {
-            //Console.WriteLine(JobSpoolSVC.job["incomplete_items"]);
-            foreach(JToken item in job["incomplete_items"])
-            {
-                Console.WriteLine(item["tagkeys"]);
-
-            }
             IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
             EthSystemConnector conn_BarcodeReader1 = new EthSystemConnector(ip_BarcodeReader1);
             BarcodeReader1 = new DataManSystem(conn_BarcodeReader1);
