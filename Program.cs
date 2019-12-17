@@ -9,8 +9,9 @@ using System.Timers;
 using System.ComponentModel;
 using Cognex.DataMan.SDK;
 using EasyModbus;
+//using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
 
 namespace dpservice_composer
 {
@@ -42,16 +43,17 @@ namespace dpservice_composer
                         {
                             BarcodeScanner.Start();
                             // test with a few barcodes
+/*                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
                             BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
                             BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
                             BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
-                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
+ */
                         }
                         BarcodeScanner.WatchForBarcode();
                         if (BarcodeScanner.barcodes.Count > 0)
                         {
                             var barcode = BarcodeScanner.barcodes.Dequeue();
-                            var itemToProcess = JobSpoolSVC.getItemIndex(barcode);
+                            var itemToProcess = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData);
                         }
                     }
                     else
@@ -60,8 +62,31 @@ namespace dpservice_composer
                         JobSpoolSVC.watchSpool();
                     }
                 }
+                BarcodeScanner.DisplayLog();
+                JobSpoolSVC.SaveJob();
             }
         }
+
+    }
+
+    public class Tag
+    {
+        public string barcodeData;
+        private long edge1Time;
+        private long edge2Time;
+
+        public Tag(string barcodeData, long edge1Time, long edge2Time)
+        {
+            this.barcodeData = barcodeData;
+            this.edge1Time = edge1Time;
+            this.edge2Time = edge2Time;
+        }
+
+        public long Elapsed()
+        {
+            return (edge2Time - edge2Time);
+        }
+
 
     }
 
@@ -74,7 +99,8 @@ namespace dpservice_composer
         static String processdir;
         static String archivedir;
         public static JToken job;
-        static SpVoice voice;
+        public static SpVoice voice;
+        public static String LastFileName;
 
         //static DPsys dpsys;
         public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();
@@ -87,7 +113,7 @@ namespace dpservice_composer
             voice = new SpVoice();
             voice.Volume = 100;
 
-            voice.Speak("Welcome to the direct print project", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+//            voice.Speak("Welcome to the direct print project", SpeechVoiceSpeakFlags.SVSFlagsAsync);
 
 
 
@@ -107,6 +133,17 @@ namespace dpservice_composer
             aTimer.Enabled = true;
         }
 
+        public static void SaveJob()
+        {
+            File.WriteAllText(archivedir+LastFileName, JsonConvert.SerializeObject(job));
+
+            // serialize JSON directly to a file
+            using (StreamWriter file = File.CreateText(archivedir+LastFileName))
+            {
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.Serialize(file, job);
+            }
+        }
         private static void CheckSpoolDirEvent(Object source, ElapsedEventArgs e)
         {
             string[] fileEntries = Directory.GetFiles(spooldir, @"*.json");
@@ -118,12 +155,13 @@ namespace dpservice_composer
                 if (File.Exists(processdir + Path.GetFileName(fileEntries[0]))) File.Delete(processdir + Path.GetFileName(fileEntries[0]));
 
                 // move file from spooled to processing
-                File.Move(spooldir + Path.GetFileName(fileEntries[0]), processdir + Path.GetFileName(fileEntries[0]));
-                using (StreamReader r = new StreamReader(processdir + Path.GetFileName(fileEntries[0])))
+                LastFileName = Path.GetFileName(fileEntries[0]);
+                File.Move(spooldir + LastFileName, processdir + LastFileName);
+                using (StreamReader r = new StreamReader(processdir + LastFileName))
                 {
                     var json = r.ReadToEnd();
                     job = JToken.Parse(json);
-
+                    
                     // now add an lookup from tagkey to item
                     JArray items = (JArray)job["incomplete_items"];
                     foreach (JToken item in items)
@@ -158,7 +196,6 @@ namespace dpservice_composer
                     tag2items[barcode].Remove(index);
                     if (tag2items[barcode].Count == 0) tag2items.Remove(barcode);
                     //                    incomplete_items[index].Remove();
-                    Console.WriteLine(incomplete_items.Count.ToString() + " items to go");
                     Console.WriteLine("Line Item " + index.ToString() + " completed");
                 }
                 return index;
@@ -179,16 +216,19 @@ namespace dpservice_composer
     public static class BarcodeScanner
     {
         static string BarcodeData;
+        static int BarcodesRead = 0;
         static ModbusClient modbusClient;
         static IPAddress ip_BarcodeReader1;
         static public DataManSystem BarcodeReader1;
         static bool SensorInitialized;
         static bool PreviousSensorState;
-        public static Queue<string> barcodes;
+        static long edge1Time, edge2Time;
+        public static Queue<Tag> barcodes;
+        static List<Tag> Tags;
         public static bool initialized = false;
         public static void Start()
         {
-            barcodes = new Queue<string>();
+            barcodes = new Queue<Tag>();
             IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
             EthSystemConnector conn_BarcodeReader1 = new EthSystemConnector(ip_BarcodeReader1);
 
@@ -214,10 +254,19 @@ namespace dpservice_composer
 
             }
 
+            Tags = new List<Tag>();
             //open connection to barcode reader
             BarcodeReader1.Connect();
             BarcodeReader1.SetResultTypes(ResultTypes.ReadString);
             initialized = true;
+        }
+
+        public static void DisplayLog()
+        {
+            foreach (Tag t in Tags.ToArray())
+            {
+                Console.WriteLine(t.barcodeData + t.Elapsed().ToString());
+            }
         }
         private static void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
         {
@@ -255,17 +304,36 @@ namespace dpservice_composer
             {
                 BarcodeData = null;
                 if (BarcodeReader1.State == ConnectionState.Connected)
+                {
+                    edge1Time = DateTime.Now.Ticks;
                     BarcodeReader1.SendCommand("TRIGGER ON");
+                }
             }
             else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
             {
                 if (BarcodeReader1.State == ConnectionState.Connected)
+                {
                     BarcodeReader1.SendCommand("TRIGGER OFF");
-
+                    edge2Time = DateTime.Now.Ticks;
+                }
                 if (BarcodeData != null)
                 {
                     //Console.WriteLine(BarcodeData.ToString());// emit to console
-                    barcodes.Enqueue(BarcodeData);
+                    Tag aTag = new Tag(BarcodeData, edge1Time, edge2Time);
+                    barcodes.Enqueue(aTag);
+                    Tags.Add(aTag);
+                    BarcodesRead++;
+                    Console.WriteLine(BarcodesRead.ToString()+":"+BarcodeData);
+                   // JobSpoolSVC.voice.Speak("Good...");
+                }
+                else
+                {
+                    Tag aTag = new Tag("No Barcode", edge1Time, edge2Time);
+                    barcodes.Enqueue(aTag);
+                    Tags.Add(aTag);
+                    Console.WriteLine("No Barcode!");
+                    // some piece of crap went through and we couldn't read a barcode.
+                   // JobSpoolSVC.voice.Speak("Crap!");
                 }
             }
         }
