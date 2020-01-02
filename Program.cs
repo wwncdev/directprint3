@@ -222,7 +222,9 @@ namespace dpservice_composer
         static public DataManSystem BarcodeReader1;
         static bool SensorInitialized;
         static bool PreviousSensorState;
-        static long edge1Time, edge2Time;
+        static long edge1Time;
+        static long edge2Time;
+        static bool triggerIsOn = false;
         public static Queue<Tag> barcodes;
         static List<Tag> Tags;
         public static bool initialized = false;
@@ -291,6 +293,9 @@ namespace dpservice_composer
             }
             else
             {
+                if (CurrentSensorState) edge1Time = DateTime.Now.Ticks;
+                else edge2Time = DateTime.Now.Ticks;
+                if (!CurrentSensorState) Console.Write(" - " + (edge2Time - edge1Time).ToString() + " - ");
                 PreviousSensorState = CurrentSensorState;
             }
 
@@ -300,21 +305,21 @@ namespace dpservice_composer
             {
                 SensorInitialized = true;
             }
-            else if (SensorInitialized == true & CurrentSensorState == true)
+            else if (SensorInitialized == true & CurrentSensorState == true)  // over a tag
             {
                 BarcodeData = null;
-                if (BarcodeReader1.State == ConnectionState.Connected)
+                if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
                 {
-                    edge1Time = DateTime.Now.Ticks;
                     BarcodeReader1.SendCommand("TRIGGER ON");
+                    triggerIsOn = true;
                 }
             }
             else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
             {
                 if (BarcodeReader1.State == ConnectionState.Connected)
                 {
-                    BarcodeReader1.SendCommand("TRIGGER OFF");
-                    edge2Time = DateTime.Now.Ticks;
+                   // BarcodeReader1.SendCommand("TRIGGER OFF");
+                    triggerIsOn = false;
                 }
                 if (BarcodeData != null)
                 {
@@ -467,7 +472,7 @@ namespace dpservice_composer
                                         {
                                             ProgramStatus.Text += BarcodeData.ToString();
                                         }); */
-                    Console.WriteLine(BarcodeData.ToString());// emit to console
+                    Console.Write(BarcodeData.ToString());// emit to console
 
                     switch (BarcodeData)
                     {
