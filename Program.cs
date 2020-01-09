@@ -1,5 +1,5 @@
 ﻿using System;
-using SpeechLib;
+//using SpeechLib;
 using System.IO;
 using System.Diagnostics;
 using System.Net;
@@ -9,62 +9,78 @@ using System.Timers;
 using System.ComponentModel;
 using Cognex.DataMan.SDK;
 using EasyModbus;
-//using Newtonsoft.Json.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using XIJET_PrintService;
 
 namespace dpservice_composer
 {
     class Program
     {
-
         static void Main(string[] args)
         {
             // monitor for job file
             // read in job file
-            if (false)
+            bool test = false;
+
+            JobSpoolSVC.Start();
+            JobSpoolSVC.watchSpool();
+            while (!(Console.KeyAvailable))
             {
-                Console.WriteLine("Using DPSys");
-                var dpsys = new DPsys();
-                Console.ReadLine();
-            }
-            else
-            {
-                JobSpoolSVC.Start();
-                JobSpoolSVC.watchSpool();
-                while (!(Console.KeyAvailable))
+                // if this isn't very performant or takes a high percent of CPU then add some sleep time
+                // to allow thread to go process other things.
+                if (JobSpoolSVC.status == "needs_processing")
                 {
-                    // if this isn't very performant or takes a high percent of CPU then add some sleep time
-                    // to allow thread to go process other things.
-                    if (JobSpoolSVC.status == "needs_processing")
+                    // Probe printer and open for handle
+                    if (!Printer.initialized)
                     {
-                        System.Threading.Thread.Sleep(10);
-                        if (!BarcodeScanner.initialized)
+                        if (Printer.Init())
                         {
-                            BarcodeScanner.Start();
-                            // test with a few barcodes
-/*                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
-                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
-                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
-                            BarcodeScanner.barcodes.Enqueue("UPCA08723318233");
- */
+                            Console.WriteLine("Printer Initialized");
                         }
-                        BarcodeScanner.WatchForBarcode();
-                        if (BarcodeScanner.barcodes.Count > 0)
+                        else
                         {
-                            var barcode = BarcodeScanner.barcodes.Dequeue();
-                            var itemToProcess = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData);
+                            Console.WriteLine("Printer Fail");
+                            Environment.Exit(0);
                         }
                     }
-                    else
+                    System.Threading.Thread.Sleep(10);
+                    if (!BarcodeScanner.initialized)
                     {
-                        System.Threading.Thread.Sleep(500);
-                        JobSpoolSVC.watchSpool();
+                        BarcodeScanner.Start();
+                        if (test){
+                           BarcodeScanner.handleBarcode("08723311272");
+                           BarcodeScanner.handleBarcode("08723311272");
+                        }
+                    }
+                    BarcodeScanner.WatchForBarcode();
+                    if (BarcodeScanner.barcodes.Count > 0)
+                    {
+                        var barcode = BarcodeScanner.barcodes.Dequeue();
+                        var index = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData);
+                        if (index >= 0)
+                        {
+                            JToken item = JobSpoolSVC.job["incomplete_items"][index];
+                            Printer.Print((string)item["label"]);
+                            Console.WriteLine("After Print");
+                        }
+                        else
+                        {
+                            // print nothing  **** To Be Completed
+                        }
                     }
                 }
-                BarcodeScanner.DisplayLog();
-                JobSpoolSVC.SaveJob();
+                else
+                {
+                    System.Threading.Thread.Sleep(50);
+                    JobSpoolSVC.watchSpool();
+                }
             }
+            // key press save and exit
+
+            //BarcodeScanner.DisplayLog();
+            Printer.Close();
+            JobSpoolSVC.SaveJob();
         }
 
     }
@@ -74,6 +90,7 @@ namespace dpservice_composer
         public string barcodeData;
         private long edge1Time;
         private long edge2Time;
+        
 
         public Tag(string barcodeData, long edge1Time, long edge2Time)
         {
@@ -99,7 +116,7 @@ namespace dpservice_composer
         static String processdir;
         static String archivedir;
         public static JToken job;
-        public static SpVoice voice;
+        //public static SpVoice voice;
         public static String LastFileName;
 
         //static DPsys dpsys;
@@ -110,8 +127,8 @@ namespace dpservice_composer
             processdir = jobfiledir + "processing/";
             archivedir = jobfiledir + "archive/";
 
-            voice = new SpVoice();
-            voice.Volume = 100;
+            //voice = new SpVoice();
+            //voice.Volume = 100;
 
 //            voice.Speak("Welcome to the direct print project", SpeechVoiceSpeakFlags.SVSFlagsAsync);
 
@@ -172,7 +189,7 @@ namespace dpservice_composer
                             tag2items[tag].Add(items.IndexOf(item));
                         }
                     }
-                    voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+                    //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
                     status = "needs_processing";
                 }
             }
@@ -218,7 +235,7 @@ namespace dpservice_composer
         static string BarcodeData;
         static int BarcodesRead = 0;
         static ModbusClient modbusClient;
-        static IPAddress ip_BarcodeReader1;
+        static IPAddress ip_BarcodeReader1= IPAddress.Parse("192.168.16.46");
         static public DataManSystem BarcodeReader1;
         static bool SensorInitialized;
         static bool PreviousSensorState;
@@ -231,7 +248,7 @@ namespace dpservice_composer
         public static void Start()
         {
             barcodes = new Queue<Tag>();
-            IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
+//            IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
             EthSystemConnector conn_BarcodeReader1 = new EthSystemConnector(ip_BarcodeReader1);
 
             BarcodeReader1 = new DataManSystem(conn_BarcodeReader1);
@@ -277,6 +294,13 @@ namespace dpservice_composer
                 BarcodeData = args.ReadString.ToString();
             }
         }
+        public static void handleBarcode(string aBarcode){
+            Tag aTag = new Tag(aBarcode, edge1Time, edge2Time);
+            barcodes.Enqueue(aTag);
+            Tags.Add(aTag);
+            BarcodesRead++;
+            Console.WriteLine(BarcodesRead.ToString() + ":" + aBarcode);            
+        }
 
         public static void WatchForBarcode() // you were missing a return type. I've added void for now
         {
@@ -287,62 +311,61 @@ namespace dpservice_composer
             CurrentSensorState = readSensorInput[0];
 
             //do nothing if the sensor state has not changed
-            if (CurrentSensorState == PreviousSensorState)
-            {
-                return;
-            }
-            else
+            if (CurrentSensorState != PreviousSensorState)
             {
                 if (CurrentSensorState) edge1Time = DateTime.Now.Ticks;
                 else edge2Time = DateTime.Now.Ticks;
                 if (!CurrentSensorState) Console.Write(" - " + (edge2Time - edge1Time).ToString() + " - ");
                 PreviousSensorState = CurrentSensorState;
-            }
 
-            //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
-            //then the sensor will be initialized the first time it is over a gap
-            if (SensorInitialized == false & CurrentSensorState == false)
-            {
-                SensorInitialized = true;
-            }
-            else if (SensorInitialized == true & CurrentSensorState == true)  // over a tag
-            {
-                BarcodeData = null;
-                if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
+                //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
+                //then the sensor will be initialized the first time it is over a gap
+                if (SensorInitialized == false & CurrentSensorState == false)
                 {
-                    BarcodeReader1.SendCommand("TRIGGER ON");
-                    triggerIsOn = true;
+                    SensorInitialized = true;
                 }
-            }
-            else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
-            {
-                if (BarcodeReader1.State == ConnectionState.Connected)
+                else if (SensorInitialized == true & CurrentSensorState == true)  // over a tag
                 {
-                   // BarcodeReader1.SendCommand("TRIGGER OFF");
-                    triggerIsOn = false;
+                    if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
+                    {
+                        BarcodeReader1.SendCommand("TRIGGER ON");
+                        triggerIsOn = true;
+                        BarcodeData = null;
+                    }
                 }
-                if (BarcodeData != null)
+                else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
                 {
-                    //Console.WriteLine(BarcodeData.ToString());// emit to console
-                    Tag aTag = new Tag(BarcodeData, edge1Time, edge2Time);
-                    barcodes.Enqueue(aTag);
-                    Tags.Add(aTag);
-                    BarcodesRead++;
-                    Console.WriteLine(BarcodesRead.ToString()+":"+BarcodeData);
-                   // JobSpoolSVC.voice.Speak("Good...");
+                    if (BarcodeReader1.State == ConnectionState.Connected)
+                    {
+                        BarcodeReader1.SendCommand("TRIGGER OFF");
+                        triggerIsOn = false;
+                    }
+                    if (BarcodeData != null)
+                    {
+                        handleBarcode(BarcodeData);
+                        //Console.WriteLine(BarcodeData.ToString());// emit to console
+/*                        Tag aTag = new Tag(BarcodeData, edge1Time, edge2Time);
+                        barcodes.Enqueue(aTag);
+                        Tags.Add(aTag);
+                        BarcodesRead++;
+                        Console.WriteLine(BarcodesRead.ToString() + ":" + BarcodeData);
+*/                        // JobSpoolSVC.voice.Speak("Good...");
+                    }
+                    else
+                    {
+                        handleBarcode("No Barcode");
+/*                        Tag aTag = new Tag("No Barcode", edge1Time, edge2Time);
+                        barcodes.Enqueue(aTag);
+                        Tags.Add(aTag);
+                        Console.WriteLine("No Barcode!");
+ */                       // some piece of crap went through and we couldn't read a barcode.
+                        // JobSpoolSVC.voice.Speak("Crap!");
+                    }
                 }
-                else
-                {
-                    Tag aTag = new Tag("No Barcode", edge1Time, edge2Time);
-                    barcodes.Enqueue(aTag);
-                    Tags.Add(aTag);
-                    Console.WriteLine("No Barcode!");
-                    // some piece of crap went through and we couldn't read a barcode.
-                   // JobSpoolSVC.voice.Speak("Crap!");
-                }
+
             }
         }
-
+ 
         private static void MonitorEdgeSensor_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             if (e.Error != null)
@@ -355,164 +378,4 @@ namespace dpservice_composer
 
     }
 
-    class DPsys
-    {
-
-        bool SensorInitialized;
-        bool PreviousSensorState;
-        string BarcodeData;
-        public DataManSystem BarcodeReader1;
-        public ModbusClient modbusClient;
-        Timer timerProtosX;
-        public BackgroundWorker MonitorEdgeSensor;
-        TcpClient tcpClientComposer;
-        StreamWriter writerComposer;
-
-       
-
-        public DPsys()
-        {
-            IPAddress ip_BarcodeReader1 = IPAddress.Parse("192.168.16.46");
-            EthSystemConnector conn_BarcodeReader1 = new EthSystemConnector(ip_BarcodeReader1);
-            BarcodeReader1 = new DataManSystem(conn_BarcodeReader1);
-            //subscribe to Cognex barcode reader "string arrived" event
-            BarcodeReader1.ReadStringArrived += new ReadStringArrivedHandler(BarcodeReader1_ReadStringArrived);
-
-            //create Modbus object to monitor edge detection sensor on the Protos X I/O board
-            modbusClient = new ModbusClient("192.168.16.45", 502);
-
-            //backgroundworker to monitor edge detection sensor on the Protos X I/O board
-            MonitorEdgeSensor = new BackgroundWorker();
-            MonitorEdgeSensor.DoWork += new DoWorkEventHandler(MonitorEdgeSensor_DoWork);
-            MonitorEdgeSensor.RunWorkerCompleted += new RunWorkerCompletedEventHandler(MonitorEdgeSensor_RunWorkerCompleted);
-
-            //timer to monitor edge detection sensor on the Protos X I/O board
-            timerProtosX = new Timer();
-            timerProtosX.Interval = 200;
-            timerProtosX.Elapsed += new ElapsedEventHandler(TimerHandlerProtosX);
-
-            //TCP client to talk to Composer
-            tcpClientComposer = new TcpClient();
-            tcpClientComposer.NoDelay = true;
-
-            //open connection to Protos X and get current state of sensor
-            modbusClient.Connect();
-            bool[] readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
-            PreviousSensorState = readSensorInput[0];
-
-            //sensor is initialized if there is no tag under the sensor when the timer is started
-            if (PreviousSensorState == false)
-            {
-                SensorInitialized = true;
-            }
-            else
-            {
-                SensorInitialized = false;
-            }
-
-            //open connection to barcode reader
-            BarcodeReader1.Connect();
-            BarcodeReader1.SetResultTypes(ResultTypes.ReadString);
-
-            //open connection to Composer
-            tcpClientComposer.Connect("127.0.0.1", 9100);
-            NetworkStream nwStreamComposer = tcpClientComposer.GetStream();
-            writerComposer = new StreamWriter(nwStreamComposer);
-            writerComposer.AutoFlush = true;
-            writerComposer.WriteLineAsync("PRT");
-
-            //start timer
-            timerProtosX.Start();
-        }
-        private void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
-        {
-            if (BarcodeData == null) 
-            {
-                BarcodeData = args.ReadString.ToString();
-            }
-        }
-
-        private void MonitorEdgeSensor_DoWork(object sender, DoWorkEventArgs e)
-        {
-            //a sensor state of true = over a tag
-            bool CurrentSensorState;
-            bool[] readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
-            CurrentSensorState = readSensorInput[0];
-
-            //do nothing if the sensor state has not changed
-            if (CurrentSensorState == PreviousSensorState)
-            {
-                return;
-            }
-            else
-            {
-                PreviousSensorState = CurrentSensorState;
-            }
-
-            //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
-            //then the sensor will be initialized the first time it is over a gap
-            if (SensorInitialized == false & CurrentSensorState == false)
-            {
-                SensorInitialized = true;
-            }
-            else if (SensorInitialized == true & CurrentSensorState == true)
-            {
-                BarcodeData = null;
-                if (BarcodeReader1.State == ConnectionState.Connected)
-                    BarcodeReader1.SendCommand("TRIGGER ON");
-            }
-            else if (SensorInitialized == true & CurrentSensorState == false)
-            {
-                if (BarcodeReader1.State == ConnectionState.Connected)
-                    BarcodeReader1.SendCommand("TRIGGER OFF");
-
-                if (BarcodeData != null)
-                {
-                    /*                     ProgramStatus.Dispatcher.Invoke(() =>
-                                        {
-                                            ProgramStatus.Text += BarcodeData.ToString();
-                                        }); */
-                    Console.Write(BarcodeData.ToString());// emit to console
-
-                    switch (BarcodeData)
-                    {
-                        case "111":
-                            writerComposer.WriteLineAsync("RPD*DATA1=$1.11");
-                            break;
-                        case "222":
-                            writerComposer.WriteLineAsync("RPD*DATA1=$2.22");
-                            break;
-                        case "333":
-                            writerComposer.WriteLineAsync("RPD*DATA1=$3.33");
-                            break;
-                        case "444":
-                            writerComposer.WriteLineAsync("RPD*DATA1=$4.44");
-                            break;
-                    }
-                }
-            }
-        }
-
-
-        private void MonitorEdgeSensor_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            if (e.Error != null)
-            {
-                //ProgramStatus.Text = e.Error.Message;
-                Console.WriteLine(e.Error.Message);
-            }
-            else
-            {
-
-            }
-        }
-
-        private void TimerHandlerProtosX(object sender, ElapsedEventArgs e)
-        {
-            MonitorEdgeSensor.RunWorkerAsync();
-            Console.Write(".");
-        }
-
-
-    }
 }

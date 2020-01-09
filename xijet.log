@@ -1,0 +1,17 @@
+00:00:00.000  XIJET_OpenLogFile 	 API v9.120 -a 
+00:00:00.017  XIJET_ProbePrinter 	  0  NP45-01 
+00:00:00.020  XIJET_OpenPrinter 	 Entry 
+00:00:00.020  XIJET_OpenPrinter 	 NAME=NP45-01  
+00:00:00.031  XIJET_OpenPrinter 	 Firmware Version: 9.2.0 / 62 
+00:00:00.802  XIJET_Reset 
+00:00:00.803  XIJET_OpenPrinter 	 NAME=NP45-01  HANDLE=091507d8 
+00:00:00.803  XIJET_OpenPrinter 	 Exit 
+00:00:00.811  XIJET_SetPrinterParameter 	 XIJET_RESOLUTION=13 
+00:00:01.548  XIJET_CanvasBegin 	 Width= 1280, Height= 1280 
+00:00:01.548  XIJET_CanvasWrite 
+00:00:01.548  XIJET_PrintDocumentPage 	 Entry 
+00:00:01.548  XIJET_PrintDocumentPage 	 Head Offset 0: 0 
+00:00:01.548  XIJET_ActivatePens 	 Entry 
+00:00:01.589  XIJET_ActivatePens 	 Exit 
+00:00:01.596  XIJET_PrintDocumentPage 	 Exit 
+00:00:01.596  XIJET_CanvasPrint 	 Head Offsets=     0   1200      0      0 
