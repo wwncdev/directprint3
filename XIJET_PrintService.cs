@@ -15,9 +15,16 @@ namespace XIJET_PrintService
         public static bool initialized = false;
         public static IntPtr PrinterHandle;
         public static IntPtr PrinterName;
+        private static byte[][] Bits = new byte[4][];
+//        private static byte[,] Bits = new byte[4,25600];
+        private static int LastBitBufferUsed = 0;
 
         public static bool Init()
         {
+            for(int i = 0; i < 4; i++)
+            {
+                Bits[i] = new byte[25600];
+            }
             // set up printer name buffer for extern function to modify (gross)
             PrinterName = Marshal.AllocHGlobal(4);
             PrinterHandle = IntPtr.Zero;
@@ -101,11 +108,11 @@ namespace XIJET_PrintService
 
             byte[] pixelArrayAsBytes = new byte[imageWidth * imageHeight]; // declare byte array for pixels
             Buffer.BlockCopy(decoded, pixelArrayOffset, pixelArrayAsBytes, 0, imageWidth * imageHeight); // copy pixel array off decoded bmp
-            byte[] pixelArrayAsBits = Printer.convertBMPtoBITS(pixelArrayAsBytes, imageWidth, imageHeight);
+            int bitBufferUsed = Printer.convertBMPtoBITS(pixelArrayAsBytes, imageWidth, imageHeight);
             //Printer.displayBITS2(pixelArrayAsBits, imageWidth, imageHeight);
 
             XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth * 2), (uint)(imageHeight * 4));
-            XIJET.CanvasWrite(PrinterHandle, 0, 0, (uint)imageWidth, (uint)imageHeight, pixelArrayAsBits);
+            XIJET.CanvasWrite(PrinterHandle, 0, 0, (uint)imageWidth, (uint)imageHeight, Bits[bitBufferUsed]);
 
             IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
             int XiJetStatus = 0;
@@ -175,30 +182,31 @@ namespace XIJET_PrintService
             }
         }
 
-        public static byte[] convertBMPtoBITS(byte[] bmp, int imageWidth,int imageHeight) 
+        public static int convertBMPtoBITS(byte[] bmp, int imageWidth,int imageHeight) 
         {
             // Some Image and Data Metrics 
             int numBytes = imageWidth * imageHeight;
             int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4
-
+            int currentBitBuffer = (LastBitBufferUsed+1)%4;
             // declare byte array bits  to copy into
-            byte[] bits = new byte[numBytes / 8 + 1]; // declare destination byte array
+//            byte[] bits = new byte[numBytes / 8 + 1]; // declare destination byte array
 
             for (int y = 0; y < imageHeight; y++) 
             {
                 for (int x = 0; x < imageWidth; x++) 
                 {
+                    if ((x%8)==0)Bits[currentBitBuffer][y*bytesPerRow+x/8]=0;  // initialize byte
                     byte bmpByte = bmp[y * imageWidth + x];
                     byte aBit = 0;
                     if (bmpByte != 1U)
                     {
                         aBit = 1;
                     } 
-                    bits[(y * bytesPerRow) + (x / 8)] += (byte)(aBit<< 7-((x % 8))); // added the 7- to test msb lsb issue
+                    Bits[currentBitBuffer][(y * bytesPerRow) + (x / 8)] += (byte)(aBit<< 7-((x % 8))); // added the 7- to test msb lsb issue
                 }
             }
-
-            return bits;
+            LastBitBufferUsed=currentBitBuffer;  // number of bit buffers = 4
+            return currentBitBuffer;
         }
 
         [DllImport("msvcrt.dll", EntryPoint = "memset", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]

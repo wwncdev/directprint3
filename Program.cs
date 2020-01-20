@@ -201,6 +201,7 @@ namespace dpservice_composer
             if (tag2items.ContainsKey(barcode))
             {
                 var index = tag2items[barcode][0];
+                Console.WriteLine("");
                 Console.WriteLine(job["incomplete_items"][index]["item_description"]);
                 int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
                 qty--;
