@@ -16,6 +16,7 @@ namespace XIJET_PrintService
         public static IntPtr PrinterHandle;
         public static IntPtr PrinterName;
         private static byte[][] Bits = new byte[4][];
+        private static readonly int BitsSize = 25600;
 //        private static byte[,] Bits = new byte[4,25600];
         private static int LastBitBufferUsed = 0;
 
@@ -23,7 +24,7 @@ namespace XIJET_PrintService
         {
             for(int i = 0; i < 4; i++)
             {
-                Bits[i] = new byte[25600];
+                Bits[i] = new byte[BitsSize];
             }
             // set up printer name buffer for extern function to modify (gross)
             PrinterName = Marshal.AllocHGlobal(4);
@@ -66,7 +67,7 @@ namespace XIJET_PrintService
             ///////////////
             //Set Parameter
             ///////////////
-            short resParameter = 13;
+            short resParameter = 6;
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
             Console.WriteLine("Status: " + Marshal.PtrToStringAnsi(pStatusMessage));
             if (XiJetStatus == 0)
