@@ -97,7 +97,7 @@ namespace XIJET_PrintService
             byte[] decoded;
             decoded = Convert.FromBase64String(imageEncoded);
             long timeToDecode = DateTimeOffset.Now.ToUnixTimeMilliseconds() - beforePrint;
-            Console.WriteLine("Time To Decode: " + timeToDecode);
+           // Console.WriteLine("Time To Decode: " + timeToDecode);
 
             int imgLen = decoded.Length;
 
@@ -121,16 +121,16 @@ namespace XIJET_PrintService
             {
                 XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
             }
-            Console.WriteLine("After Canvas Print Loop");
+           // Console.WriteLine("After Canvas Print Loop");
             if (XiJetStatus != 1) // status indicates error, retrieve and print
             {
                 XIJET.GetStatus(PrinterHandle, pStatusMessage);
-                Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
-                Console.WriteLine("return");
+             //   Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
+             //   Console.WriteLine("return");
             }
             if (XiJetStatus < 0) // terminated with an error, issue a reset
             {
-                Console.WriteLine("Reset Printer");
+            //    Console.WriteLine("Reset Printer");
                 XIJET.Reset(PrinterHandle);
                 return false;
             }
@@ -160,7 +160,7 @@ namespace XIJET_PrintService
         {
             int numBytes = imageWidth * imageHeight;
             int bytesPerRow = imageWidth / 8;  
-            Console.WriteLine($"Byte per row: {0} imageWidth:{1} imageHeight:{2}", bytesPerRow, imageWidth, imageHeight);
+       //     Console.WriteLine($"Byte per row: {0} imageWidth:{1} imageHeight:{2}", bytesPerRow, imageWidth, imageHeight);
 
             for (int y = imageHeight - 1; y > 0; y--) 
             {
