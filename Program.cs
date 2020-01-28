@@ -183,10 +183,14 @@ namespace dpservice_composer
                     JArray items = (JArray)job["incomplete_items"];
                     foreach (JToken item in items)
                     {
-                        foreach (string tag in item["tagkeys"])
-                        {
-                            if (!tag2items.ContainsKey(tag)) tag2items[tag] = new List<int>();
-                            tag2items[tag].Add(items.IndexOf(item));
+                        JArray tagkeys = (JArray)item["tagkeys"];
+
+                        if (tagkeys.Count > 0) {
+                            foreach (string tag in item["tagkeys"])
+                            {
+                                if (!tag2items.ContainsKey(tag)) tag2items[tag] = new List<int>();
+                                tag2items[tag].Add(items.IndexOf(item));
+                            }
                         }
                     }
                     //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
@@ -201,8 +205,8 @@ namespace dpservice_composer
             if (tag2items.ContainsKey(barcode))
             {
                 var index = tag2items[barcode][0];
-                Console.WriteLine("");
-                Console.WriteLine(job["incomplete_items"][index]["item_description"]);
+          //      Console.WriteLine("");
+          //      Console.WriteLine(job["incomplete_items"][index]["item_description"]);
                 int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
                 qty--;
                 job["incomplete_items"][index]["notprintedqty"] = qty;
@@ -214,13 +218,13 @@ namespace dpservice_composer
                     tag2items[barcode].Remove(index);
                     if (tag2items[barcode].Count == 0) tag2items.Remove(barcode);
                     //                    incomplete_items[index].Remove();
-                    Console.WriteLine("Line Item " + index.ToString() + " completed");
+          //          Console.WriteLine("Line Item " + index.ToString() + " completed");
                 }
                 return index;
             }
             else
             {
-                Console.WriteLine(barcode + " no qty left to print");
+           //     Console.WriteLine(barcode + " no qty left to print");
                 return -1;
             }
         }
