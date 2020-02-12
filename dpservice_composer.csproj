@@ -6,9 +6,6 @@
     <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
-
-  </ItemGroup>
-  <ItemGroup>
     <Reference Include="Cognex.Dataman.SDK.PC">
       <HintPath>Cognex.Dataman.SDK.PC.dll</HintPath>
     </Reference>

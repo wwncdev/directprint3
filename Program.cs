@@ -15,6 +15,7 @@ using XIJET_PrintService;
 
 namespace dpservice_composer
 {
+
     class Program
     {
         static void Main(string[] args)
@@ -25,8 +26,49 @@ namespace dpservice_composer
 
             JobSpoolSVC.Start();
             JobSpoolSVC.watchSpool();
-            while (!(Console.KeyAvailable))
+            bool doneProcessing = false;
+            while (!doneProcessing)
             {
+                
+                if (Console.KeyAvailable)
+                {
+                    System.ConsoleKeyInfo keyInfo = Console.ReadKey(true);
+                    char cmd = keyInfo.KeyChar;
+                    switch (char.ToUpper(cmd))
+                    {
+                        case 'Q':
+                            doneProcessing = true;
+                            break;
+                        case 'L':
+                            if (BarcodeScanner.initialized)
+                            {
+                                BarcodeScanner.DisplayLog();
+                            };
+                            break;
+                        case 'E':
+                            // end processing current job
+                            JobSpoolSVC.status = "Starting";
+                            Console.WriteLine("Processing of Job ended.");
+                            break;
+                        case 'G':
+                            string goat = (string)JobSpoolSVC.job["goat"];
+                            Console.WriteLine("Goat");
+                            Printer.displayHex(goat);
+                            Console.WriteLine();
+                            break;
+                        case 'S':
+                            Console.WriteLine("Display Current Status:");
+                            JobSpoolSVC.DisplayStatus();
+                            break;
+                        case 'W':
+                            JobSpoolSVC.SaveJob();
+                            break;
+
+                        default:
+                            displayHelp();
+                            break;
+                    }
+                }
                 // if this isn't very performant or takes a high percent of CPU then add some sleep time
                 // to allow thread to go process other things.
                 if (JobSpoolSVC.status == "needs_processing")
@@ -60,13 +102,15 @@ namespace dpservice_composer
                         var index = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData);
                         if (index >= 0)
                         {
-                            JToken item = JobSpoolSVC.job["incomplete_items"][index];
-                            Printer.Print((string)item["label"]);
-                            Console.WriteLine("After Print");
+                            //                            JToken item = JobSpoolSVC.job["incomplete_items"][index];
+                            //Printer.Print((string)item["label"]);
+                            Printer.PrintBits(JobSpoolSVC.index2image[index]);
+
                         }
                         else
                         {
-                            // print nothing  **** To Be Completed
+                            string goat = (string) JobSpoolSVC.job["goat"];
+                            Printer.Print(goat);
                         }
                     }
                 }
@@ -78,16 +122,29 @@ namespace dpservice_composer
             }
             // key press save and exit
 
-            //BarcodeScanner.DisplayLog();
+           // BarcodeScanner.DisplayLog();
             Printer.Close();
             JobSpoolSVC.SaveJob();
         }
 
+        static void  displayHelp()
+        {
+            Console.WriteLine("");
+            Console.WriteLine("Q - Quit");
+            Console.WriteLine("L - Log");
+            Console.WriteLine("S - Status");
+            Console.WriteLine("");
+
+        }
+
+
     }
+
 
     public class Tag
     {
         public string barcodeData;
+        public string description;
         private long edge1Time;
         private long edge2Time;
         
@@ -120,17 +177,18 @@ namespace dpservice_composer
         public static String LastFileName;
 
         //static DPsys dpsys;
-        public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();
+        public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();  // needs cleaned up at end of job?
+        public static Dictionary<int,byte[]> index2image = new Dictionary<int,byte[]>();
         public static void Start()
         {
             spooldir = jobfiledir + "spooled/";
             processdir = jobfiledir + "processing/";
             archivedir = jobfiledir + "archive/";
 
-            //voice = new SpVoice();
-            //voice.Volume = 100;
-
-//            voice.Speak("Welcome to the direct print project", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+//            voice = new SpVoice();
+//            voice.SetVolume(100);
+            uint flag = 0;
+ //           voice.Speak("Welcome to the direct print project", 0,out flag);
 
 
 
@@ -181,9 +239,15 @@ namespace dpservice_composer
                     
                     // now add an lookup from tagkey to item
                     JArray items = (JArray)job["incomplete_items"];
+                    tag2items.Clear();  // reuse this dictionary so clear it before building on current job.
+                    index2image.Clear();
+
                     foreach (JToken item in items)
                     {
                         JArray tagkeys = (JArray)item["tagkeys"];
+                        // Convert image to go from item to bitmap
+                        int index = items.IndexOf(item);
+                        index2image.Add(index, ConvertImage((string) item["label"]));
 
                         if (tagkeys.Count > 0) {
                             foreach (string tag in item["tagkeys"])
@@ -194,8 +258,26 @@ namespace dpservice_composer
                         }
                     }
                     //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
+                    Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
                     status = "needs_processing";
                 }
+            }
+        }
+
+        public static string Aslen(string str,int l)
+        {
+            if (str.Length > l) str = str.Substring(0, l);
+            else str = str.PadRight(l);
+            return str;
+        }
+        public static void DisplayStatus()
+        {
+            JArray items = (JArray)job["incomplete_items"];
+            foreach(JToken item in items)
+            {
+                Console.Write(Aslen(item["item_description"].ToString(),30));
+                Console.Write(item["notprintedqty"].ToString().PadLeft(5));
+                Console.WriteLine();
             }
         }
 
@@ -228,13 +310,44 @@ namespace dpservice_composer
                 return -1;
             }
         }
+        public static byte[] ConvertImage(string imageEncoded)
+        {
+            byte[] bmp = Convert.FromBase64String(imageEncoded);
+            // Some Image and Data Metrics 
+            int imgLen = bmp.Length;
+            int o= bmp[10] + bmp[11] * 256;
+            int imageWidth = bmp[18] + bmp[19] * 256;
+            int imageHeight = bmp[22] + bmp[23] * 256;
+            int colorPlanes = bmp[26];
+            int bitsPerPixel = bmp[28];
+
+            int numBytes = imageWidth * imageHeight;
+            int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4
+            byte[] Bits = new byte[(imageWidth * imageHeight) / 8];
+
+            for (int y = 0; y < imageHeight; y++)
+            {
+                for (int x = 0; x < imageWidth; x++)
+                {
+                    if ((x % 8) == 0) Bits[y * bytesPerRow + x / 8] = 0;  // initialize byte
+                    byte bmpByte = bmp[o+y * imageWidth + x];
+                    byte aBit = 0;
+                    if (bmpByte != 1U)
+                    {
+                        aBit = 1;
+                    }
+                    Bits[(y * bytesPerRow) + (x / 8)] += (byte)(aBit << 7 - ((x % 8))); // added the 7- to test msb lsb issue
+                }
+            }
+            return Bits;
+        }
     }
 
 
-        /**************************************************************
-         * if edge detector says there is a tag then "pull the trigger" on the barcode scanner.
-         * 
-         */
+    /**************************************************************
+     * if edge detector says there is a tag then "pull the trigger" on the barcode scanner.
+     * 
+     */
     public static class BarcodeScanner
     {
         static string BarcodeData;
@@ -289,7 +402,16 @@ namespace dpservice_composer
         {
             foreach (Tag t in Tags.ToArray())
             {
-                Console.WriteLine(t.barcodeData + t.Elapsed().ToString());
+                var index = JobSpoolSVC.getItemIndex("UPCA" + t.barcodeData);
+                if (index >= 0)
+                {
+                    JToken item = JobSpoolSVC.job["incomplete_items"][index];
+                    Console.WriteLine(item["item_description"].ToString().PadRight(20) + " " + t.barcodeData.PadRight(15) + " : " + t.Elapsed().ToString().PadLeft(10));
+                }
+                else
+                {
+                    Console.WriteLine("Goat".PadRight(20) + " " + t.barcodeData.PadRight(15) + " : " + t.Elapsed().ToString().PadLeft(15));
+                }
             }
         }
         private static void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
@@ -320,7 +442,7 @@ namespace dpservice_composer
             {
                 if (CurrentSensorState) edge1Time = DateTime.Now.Ticks;
                 else edge2Time = DateTime.Now.Ticks;
-                if (!CurrentSensorState) Console.Write(" - " + (edge2Time - edge1Time).ToString() + " - ");
+          //      if (!CurrentSensorState) Console.Write(" - " + (edge2Time - edge1Time).ToString() + " - ");
                 PreviousSensorState = CurrentSensorState;
 
                 //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
@@ -348,23 +470,13 @@ namespace dpservice_composer
                     if (BarcodeData != null)
                     {
                         handleBarcode(BarcodeData);
-                        //Console.WriteLine(BarcodeData.ToString());// emit to console
-/*                        Tag aTag = new Tag(BarcodeData, edge1Time, edge2Time);
-                        barcodes.Enqueue(aTag);
-                        Tags.Add(aTag);
-                        BarcodesRead++;
-                        Console.WriteLine(BarcodesRead.ToString() + ":" + BarcodeData);
-*/                        // JobSpoolSVC.voice.Speak("Good...");
                     }
                     else
                     {
                         handleBarcode("No Barcode");
-/*                        Tag aTag = new Tag("No Barcode", edge1Time, edge2Time);
-                        barcodes.Enqueue(aTag);
-                        Tags.Add(aTag);
-                        Console.WriteLine("No Barcode!");
- */                       // some piece of crap went through and we couldn't read a barcode.
-                        // JobSpoolSVC.voice.Speak("Crap!");
+                        string goat = "Goat!";
+                        uint flag;
+                      //  JobSpoolSVC.voice.Speak(goat, 0,out flag);
                     }
                 }
 

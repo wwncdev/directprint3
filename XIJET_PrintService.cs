@@ -155,7 +155,62 @@ namespace XIJET_PrintService
             Console.WriteLine("Color Planes: " + colorPlanes);
             Console.WriteLine("Bits Per Pixel: " + bitsPerPixel); */
         }
+        public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=320,int yoffset=0)
+        {
 
+            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth * 2), (uint)(imageHeight * 4));
+            XIJET.CanvasWrite(PrinterHandle, 0, (uint) yoffset, (uint)imageWidth, (uint)imageHeight, Bits);
+
+            IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
+            int XiJetStatus = 0;
+            while (XiJetStatus == 0) // keep printing from internal queue until status changes
+            {
+                XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
+            }
+            // Console.WriteLine("After Canvas Print Loop");
+            if (XiJetStatus != 1) // status indicates error, retrieve and print
+            {
+                XIJET.GetStatus(PrinterHandle, pStatusMessage);
+                //   Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
+                //   Console.WriteLine("return");
+            }
+            if (XiJetStatus < 0) // terminated with an error, issue a reset
+            {
+                //    Console.WriteLine("Reset Printer");
+                XIJET.Reset(PrinterHandle);
+                return false;
+            }
+            else
+            {
+                /*Console.WriteLine("Terminated without an error");
+                Console.WriteLine(Marshal.PtrToStringAnsi(pStatusMessage));
+                XiJetStatus = 0; // reset status
+                while (XiJetStatus == 0)
+                {
+                    XiJetStatus = XIJET.WaitForPrintComplete(PrinterHandle, 100);
+                    Console.WriteLine("wait for print complete");
+                }*/
+            }
+            XiJetStatus = 0;
+            Marshal.FreeHGlobal(pStatusMessage);
+            return true;
+        }
+
+        public static void displayHex(string imageEncoded)
+        {
+            byte[] decoded;
+            decoded = Convert.FromBase64String(imageEncoded);
+            for (int x = 0; x < 512; x++)
+            {
+                if (x % 16 == 0)
+                {
+                    System.Threading.Thread.Sleep(50);
+                    Console.WriteLine();
+                    Console.Write(x.ToString("X4")+":");
+                }
+                Console.Write(decoded[x].ToString("X2") + " ");
+            }
+        }
         public static void displayBITS2(byte[] bits, int imageWidth, int imageHeight)
         {
             int numBytes = imageWidth * imageHeight;
@@ -188,7 +243,7 @@ namespace XIJET_PrintService
             // Some Image and Data Metrics 
             int numBytes = imageWidth * imageHeight;
             int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4
-            int currentBitBuffer = (LastBitBufferUsed+1)%4;
+            int currentBitBuffer = (LastBitBufferUsed+1)%4; // code is not reentrant and no protected either... 
             // declare byte array bits  to copy into
 //            byte[] bits = new byte[numBytes / 8 + 1]; // declare destination byte array
 
