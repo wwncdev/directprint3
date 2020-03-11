@@ -22,10 +22,6 @@ namespace XIJET_PrintService
 
         public static bool Init()
         {
-            for(int i = 0; i < 4; i++)
-            {
-                Bits[i] = new byte[BitsSize];
-            }
             // set up printer name buffer for extern function to modify (gross)
             PrinterName = Marshal.AllocHGlobal(4);
             PrinterHandle = IntPtr.Zero;
@@ -83,6 +79,10 @@ namespace XIJET_PrintService
             return true;
         }
 
+        public static void Flush()
+        {
+            XIJET.Reset(PrinterHandle);
+        }
         public static void Close()
         {
             XIJET.ClosePrinter(PrinterHandle);
@@ -91,76 +91,11 @@ namespace XIJET_PrintService
             initialized = false;
         }
 
-        public static bool Print(string imageEncoded)
-        {
-            long beforePrint = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-            byte[] decoded;
-            decoded = Convert.FromBase64String(imageEncoded);
-            long timeToDecode = DateTimeOffset.Now.ToUnixTimeMilliseconds() - beforePrint;
-           // Console.WriteLine("Time To Decode: " + timeToDecode);
-
-            int imgLen = decoded.Length;
-
-            int pixelArrayOffset = decoded[10]+decoded[11]*256;
-            int imageWidth = decoded[18]+decoded[19]*256;
-            int imageHeight= decoded[22]+decoded[23]*256;
-            int colorPlanes = decoded[26];
-            int bitsPerPixel = decoded[28];
-
-            byte[] pixelArrayAsBytes = new byte[imageWidth * imageHeight]; // declare byte array for pixels
-            Buffer.BlockCopy(decoded, pixelArrayOffset, pixelArrayAsBytes, 0, imageWidth * imageHeight); // copy pixel array off decoded bmp
-            int bitBufferUsed = Printer.convertBMPtoBITS(pixelArrayAsBytes, imageWidth, imageHeight);
-            //Printer.displayBITS2(pixelArrayAsBits, imageWidth, imageHeight);
-
-            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth * 2), (uint)(imageHeight * 4));
-            XIJET.CanvasWrite(PrinterHandle, 0, 0, (uint)imageWidth, (uint)imageHeight, Bits[bitBufferUsed]);
-
-            IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
-            int XiJetStatus = 0;
-            while (XiJetStatus == 0) // keep printing from internal queue until status changes
-            {
-                XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
-            }
-           // Console.WriteLine("After Canvas Print Loop");
-            if (XiJetStatus != 1) // status indicates error, retrieve and print
-            {
-                XIJET.GetStatus(PrinterHandle, pStatusMessage);
-             //   Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
-             //   Console.WriteLine("return");
-            }
-            if (XiJetStatus < 0) // terminated with an error, issue a reset
-            {
-            //    Console.WriteLine("Reset Printer");
-                XIJET.Reset(PrinterHandle);
-                return false;
-            }
-            else
-            {
-                /*Console.WriteLine("Terminated without an error");
-                Console.WriteLine(Marshal.PtrToStringAnsi(pStatusMessage));
-                XiJetStatus = 0; // reset status
-                while (XiJetStatus == 0)
-                {
-                    XiJetStatus = XIJET.WaitForPrintComplete(PrinterHandle, 100);
-                    Console.WriteLine("wait for print complete");
-                }*/
-            }
-            XiJetStatus = 0;
-            Marshal.FreeHGlobal(pStatusMessage);
-            return true;
-
-/*             Console.WriteLine("Offset of Pixel Array: " + pixelArrayOffset);
-            Console.WriteLine("Image Width: " + imageWidth);
-            Console.WriteLine("Image Height: " + imageHeight);
-            Console.WriteLine("Color Planes: " + colorPlanes);
-            Console.WriteLine("Bits Per Pixel: " + bitsPerPixel); */
-        }
-        public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=320,int yoffset=0)
+        public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=100)
         {
 
-            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth * 2), (uint)(imageHeight * 4));
-            XIJET.CanvasWrite(PrinterHandle, 0, (uint) yoffset, (uint)imageWidth, (uint)imageHeight, Bits);
-
+            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight+yoffset));  //hast to be long enough
+            XIJET.CanvasWrite(PrinterHandle, 0,(uint) yoffset, (uint)imageWidth, (uint)imageHeight, Bits);
             IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
             int XiJetStatus = 0;
             while (XiJetStatus == 0) // keep printing from internal queue until status changes
