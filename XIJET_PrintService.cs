@@ -23,7 +23,7 @@ namespace XIJET_PrintService
         public static bool Init()
         {
             // set up printer name buffer for extern function to modify (gross)
-            PrinterName = Marshal.AllocHGlobal(4);
+            PrinterName = Marshal.AllocHGlobal(8);
             PrinterHandle = IntPtr.Zero;
             IntPtr pPrinterConfig = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.CONFIGURATION)));
             int XiJetStatus;
@@ -63,8 +63,13 @@ namespace XIJET_PrintService
             ///////////////
             //Set Parameter
             ///////////////
-            short resParameter = 6;
+                       short resParameter = 7; // 300x300 dark
+            //           short resParameter = 12; // 300x300 Normal
+            //            short resParameter = 6; // 300x300 Fast
+//            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
+            // this GetStatus call may be blowing things up later.  Very hard to tell.
+            //XIJET.GetStatus(PrinterHandle, pStatusMessage); // was missing call to get status
             Console.WriteLine("Status: " + Marshal.PtrToStringAnsi(pStatusMessage));
             if (XiJetStatus == 0)
             {
@@ -77,6 +82,67 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(pStatusMessage);
             initialized = true;
             return true;
+        }
+
+        public static void DisplayParams()
+        {
+            IntPtr resolution = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr queueDepth = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr subSample = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr jetBlanking = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr auxOutput = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr triggerOffset = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr headHeight = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));
+            IntPtr penWarming = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr triggerMask = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UInt32)));
+            IntPtr resolutionDirect = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.RESOLUTION_STRUCT)));
+            IntPtr skipTrigDetect = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION, resolution);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, queueDepth);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.JET_BLANKING, jetBlanking);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.AUX_OUTPUT, auxOutput);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffset);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.HEAD_HEIGHT, headHeight);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.PEN_WARMING, penWarming);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_MASK, triggerMask);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION_DIRECT, resolutionDirect);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SKIP_TRIG_DETECT, skipTrigDetect);
+
+            Console.WriteLine("PARAM - RESOLUTION: " + Marshal.ReadInt16(resolution));
+            Console.WriteLine("PARAM - QUEUE_DEPTH: " + Marshal.ReadInt16(queueDepth));
+            Console.WriteLine("PARAM - SUB_SAMPLE: " + Marshal.ReadInt16(subSample));
+            Console.WriteLine("PARAM - JET_BLANKING: " + Marshal.ReadInt16(jetBlanking));
+            Console.WriteLine("PARAM - AUX_OUTPUT: " + Marshal.ReadInt16(auxOutput));
+            Console.WriteLine("PARAM - TRIGGER_OFFSET: " + Marshal.ReadInt16(triggerOffset));
+            Console.WriteLine("PARAM - HEAD_HEIGHT: " + Marshal.ReadInt16(headHeight));
+            Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
+            Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
+            Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
+            Console.WriteLine("PARAM - INK_PROFILE - temperature: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).temperature);
+            Console.WriteLine("PARAM - PEN_WARMING: " + Marshal.ReadInt16(penWarming));
+            Console.WriteLine("PARAM - TRIGGER_MASK: " + Marshal.ReadIntPtr(triggerMask));
+            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resVerticalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resVerticalDPI);
+            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resHorizontalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resHorizontalDPI);
+            Console.WriteLine("PARAM - RESOLUTION_DIRECT - fastModeFactor: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).fastModeFactor);
+            Console.WriteLine("PARAM - RESOLUTION_DIRECT - bitsPerPixel: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).bitsPerPixel);
+            System.Threading.Thread.Sleep(500);
+
+            Marshal.FreeHGlobal(resolution);
+            Marshal.FreeHGlobal(queueDepth);
+            Marshal.FreeHGlobal(subSample);
+            Marshal.FreeHGlobal(jetBlanking);
+            Marshal.FreeHGlobal(auxOutput);
+            Marshal.FreeHGlobal(triggerOffset);
+            Marshal.FreeHGlobal(headHeight);
+            Marshal.FreeHGlobal(inkProfile);
+            Marshal.FreeHGlobal(penWarming);
+            Marshal.FreeHGlobal(triggerMask);
+            Marshal.FreeHGlobal(resolutionDirect);
+            Marshal.FreeHGlobal(skipTrigDetect);
         }
 
         public static void Flush()
