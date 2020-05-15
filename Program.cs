@@ -19,6 +19,8 @@ namespace dpservice_composer
     class Program
     {
         public static int yoffset = 100;
+        public static bool dblWidth = false;
+
         static void Main(string[] args)
         {
             // monitor for job file
@@ -32,7 +34,27 @@ namespace dpservice_composer
             int imageWidth = 640;
             int imageHeight = 192;
             int lastIndex=0;
+
             string lastBarcode= "UPCA08723321869";
+
+            foreach(string arg in args)
+            {
+                Console.WriteLine(arg);
+                switch (arg.Split("=")[0])
+                {
+                    case "imageWidth":
+                        int val = int.Parse(arg.Split("=")[1]);
+                        imageWidth = val;
+                        break;
+                    case "dblWidth":
+                        bool bval = bool.Parse(arg.Split("=")[1]);
+                        dblWidth = bval;
+                        break;
+                    default:
+                        Console.WriteLine("Error above argument not recognized");
+                        break;
+                }
+            }
 
 //            JobSpoolSVC.ReadSettings();
             while (!doneProcessing)
@@ -141,7 +163,7 @@ namespace dpservice_composer
                     // Probe printer and open for handle
                     if (!Printer.initialized)
                     {
-                        if (Printer.Init())
+                        if (Printer.Init(Program.dblWidth))
                         {
                             Console.WriteLine("Printer Initialized");
                         }
@@ -160,11 +182,11 @@ namespace dpservice_composer
                         lastBarcode = "UPCA"+barcode.barcodeData;
                         if (index >= 0)
                         {
-                            Printer.PrintBits(JobSpoolSVC.index2image[index],imageWidth,imageHeight,yoffset);
+                            Printer.PrintBits(JobSpoolSVC.index2image[index],imageWidth*(Program.dblWidth?2:1),imageHeight,yoffset);
                         }
                         else
                         {
-                            Printer.PrintBits(JobSpoolSVC.goatImage,imageWidth,imageHeight,yoffset);
+                            Printer.PrintBits(JobSpoolSVC.goatImage,imageWidth * (Program.dblWidth ? 2 : 1), imageHeight,yoffset);
                         }
                     }
                 }
@@ -252,6 +274,8 @@ namespace dpservice_composer
         public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();  // needs cleaned up at end of job?
         public static Dictionary<int,byte[]> index2image = new Dictionary<int,byte[]>();
         public static byte[] goatImage;
+
+        public static int imageWidth { get; private set; }
 
         public static void Start()
         {
@@ -347,6 +371,9 @@ namespace dpservice_composer
                             }
                         }
                     }
+                    var index2 = JobSpoolSVC.getItemIndex("UPCA08723305937", true);
+
+               //     Printer.displayBITS2(index2image[index2], 640 * (Program.dblWidth ? 2 : 1),192);
                     //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
                     Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
                     status = "needs_processing";
@@ -430,6 +457,28 @@ namespace dpservice_composer
                 Console.WriteLine("Barcode " + lastBarcode + " not contained in order");
             }
         }
+
+
+        public static byte[] DoubleWidth(byte[] image)
+        {
+            byte[] Bits = new byte[image.Length * 2];
+            for (int x = 0; x < image.Length; x++)
+            {
+                byte v = image[x];
+                int r = 0;
+                for(int b = 0; b < 8; b++)  // loop through 8 bits
+                {
+                    if ((v&(1<< b))!=0)
+                    {
+                        r += (3 << (b * 2));
+                    }                    
+                }
+                Bits[(x * 2)+1] = (byte) (r%256);
+                Bits[(x * 2)]   = (byte)(r / 256);
+            }
+            return Bits;
+        }
+
         public static byte[] ConvertImage(string imageEncoded)
         {
             byte[] bmp = Convert.FromBase64String(imageEncoded);
@@ -459,7 +508,14 @@ namespace dpservice_composer
                     Bits[(y * bytesPerRow) + (x / 8)] += (byte)(aBit << 7 - ((x % 8))); // added the 7- to test msb lsb issue
                 }
             }
-            return Bits;
+            if (Program.dblWidth)
+            {
+                return DoubleWidth(Bits);
+            }
+            else
+            {
+                return Bits;
+            }
         }
     }
 

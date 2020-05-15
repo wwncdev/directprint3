@@ -19,8 +19,12 @@ namespace XIJET_PrintService
         private static readonly int BitsSize = 25600;
 //        private static byte[,] Bits = new byte[4,25600];
         private static int LastBitBufferUsed = 0;
+        const ushort XIJET_TRIGGER_TYPE = 102;// USHORT - NON-VOL - (see constants below)
+        const ushort XIJET_TRIGGER_MASK =   9;		// ULONG -	Mask print trigger for distance (in mils)
 
-        public static bool Init()
+
+
+        public static bool Init(bool dblWidth=false)
         {
             // set up printer name buffer for extern function to modify (gross)
             PrinterName = Marshal.AllocHGlobal(8);
@@ -63,11 +67,30 @@ namespace XIJET_PrintService
             ///////////////
             //Set Parameter
             ///////////////
-                       short resParameter = 7; // 300x300 dark
-            //           short resParameter = 12; // 300x300 Normal
-            //            short resParameter = 6; // 300x300 Fast
-//            short resParameter = 0; // 600x600
+            //            short resParameter = 7; // 300x300 dark
+            short resParameter = 12; // 300x300 Normal
+ //           resParameter = 0; // 300x300 Fast
+            if (dblWidth)  resParameter = 1; // 600x300 dark
+            //            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
+            short headOrientation = 1;
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
+//            short printDelay = 2000;
+            short trigger_mask_value = 5500; // 5.5 inches
+            short trigger_type_value = 1; // trigger type rising
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle,XIJET_TRIGGER_MASK,&trigger_mask_value);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
+//            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
+
+            short hOff1 = 0;
+            short hOff2 = 1012;
+            short hOff3 = 2022;
+            short hOff4 = 3032;
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 108, &hOff1);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 109, &hOff2);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 110, &hOff3);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 111, &hOff4);
+
             // this GetStatus call may be blowing things up later.  Very hard to tell.
             //XIJET.GetStatus(PrinterHandle, pStatusMessage); // was missing call to get status
             Console.WriteLine("Status: " + Marshal.PtrToStringAnsi(pStatusMessage));
@@ -79,6 +102,7 @@ namespace XIJET_PrintService
                 Console.WriteLine("Status: " + Marshal.PtrToStringAnsi(pStatusMessage));
                 return false;
             }
+            DisplayParams();
             Marshal.FreeHGlobal(pStatusMessage);
             initialized = true;
             return true;
@@ -160,8 +184,10 @@ namespace XIJET_PrintService
         public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=100)
         {
 
-            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight+yoffset));  //hast to be long enough
-            XIJET.CanvasWrite(PrinterHandle, 0,(uint) yoffset, (uint)imageWidth, (uint)imageHeight, Bits);
+            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight + yoffset));  //hast to be long enough
+//            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), 1725);  //hast to be long enough
+            XIJET.CanvasWrite(PrinterHandle,0,(uint)yoffset,(uint)imageWidth, (uint)imageHeight, Bits);
+//            XIJET.CanvasWrite(PrinterHandle, 0, 50, (uint)imageWidth, (uint)imageHeight, Bits);
             IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
             int XiJetStatus = 0;
             while (XiJetStatus == 0) // keep printing from internal queue until status changes

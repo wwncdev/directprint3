@@ -11,7 +11,7 @@
 //
 // for "dot releases" e.g. 7.4.2 set number to 7.42
 //
-#define XIJET_API_VERSION		9.12
+#define XIJET_API_VERSION		10.0
 
 ///////////////////////////////////////////////
 //
@@ -23,6 +23,9 @@
 #define XIJET_TYPE_XAAR500		3
 #define XIJET_TYPE_NEUFLOR		4
 #define XIJET_TYPE_KM1024I		5
+#define XIJET_TYPE_KYO_KJ4		6
+#define XIJET_TYPE_JUNO			7
+#define XIJET_TYPE_RICOH		8
 
 //  in the new API specification, "CARTRIGE" was replaced with the more generic "INK"
 //  these defines allow for backward compatibility...
@@ -58,7 +61,8 @@
 
 #define NUM_RESOLUTIONS_NP45	15		// HP resolutions supported
 #define NUM_RESOLUTIONS_LX		15		// Lexmark resolutions supported
-#define NUM_RESOLUTIONS_KM512	4		// KM512
+#define NUM_RESOLUTIONS_KM512	2		// KM512
+#define NUM_RESOLUTIONS_KYO_KJ4 6		// Kyocera
 
 #define MAX_CUSTOM_RESOLUTIONS	50		// customer special...
 
@@ -145,25 +149,58 @@ typedef struct {
 
 ///////////////////////////////////////////////////////////////////
 //
-//	Parameters constants used in calls to XIJET_GetPrinterParameter,
+//	Parameter constants used in calls to XIJET_GetPrinterParameter,
 //  XIJET_SetPrinterParameter
 //
 
 #define	XIJET_RESOLUTION		0		// USHORT - resolution index as defined below
 #define XIJET_QUEUE_DEPTH		1		// USHORT - controls how many print buffers are used; i.e. 2=double buffering
-#define XIJET_SUB_SAMPLE		2		// USHORT - 1=print every horizontal line; 2=print every other horizontal line; etc.
+#define XIJET_SPP_NSP_2			2		// NON-SUPPORTED
 #define	XIJET_JET_BLANKING		3		// USHORT - 0=off (print with all jets); 1=on (blank "trailing" jets)
 #define	XIJET_AUX_OUTPUT		4		// USHORT - bitmapped control word. Bit 0 = Aux Output. Head specific.
-#define	XIJET_TRIGGER_OFFSET	5		// USHORT - photocell offset in mils.  Head specific.
-#define	XIJET_HEAD_HEIGHT		6		// USHORT - head height in mils.  Head specific.
+#define	XIJET_SPP_NSP_5			5		// RETIRED - was XIJET_TRIGGER_OFFSET which has new constant below (old constant will still work)
+#define	XIJET_HEAD_HEIGHT		6		// USHORT - READ-ONLY - head height in mils.  Head specific - head index must be specified
 #define	XIJET_INK_PROFILE		7		// INK_PROFILE - (same as CARTRIGE_PROFILE) used for updated spec.
 #define	XIJET_PEN_WARMING		8		// USHORT - 0=off; 1=pre-warm; 2=continuous
 #define XIJET_TRIGGER_MASK		9		// ULONG -	Mask print trigger for distance (in mils)
-#define XIJET_RESOLUTION_DIRECT 10		// RESOLUTION_STRUCT
+#define XIJET_SPP_NSP_10		10		// NON-SUPPORTED
 #define XIJET_SKIP_TRIG_DETECT	11		// USHORT - 0=off; 1=on - Web systems option
-#define XIJET_PRINT_WINDOW_MAX	12		// USHORT - distance in inches (encoder) or time in milliseconds (fixed speed)
-#define XIJET_PRINT_WINDOW_MIN	13		// USHORT - distance in inches (encoder) or time in milliseconds (fixed speed)
+#define XIJET_PRINT_WINDOW_MAX	12		// USHORT - distance in inches (encoder) or time in milliseconds (fixed speed) - Read-and-Print systems only
+#define XIJET_PRINT_WINDOW_MIN	13		// USHORT - distance in inches (encoder) or time in milliseconds (fixed speed) - Read-and-Print systems only
+#define XIJET_PRINT_DELAY		14		// USHORT - global horizontal offset, aka print delay - distance in mils
 
+										// ONLY NON-VOL parameters beyond this point...
+#define XIJET_HEAD_ORIENTATION	100		// USHORT - NON-VOL - (see constants below)
+#define XIJET_ENCODER_RES		101		// USHORT - NON-VOL - counts/inch
+#define XIJET_TRIGGER_TYPE		102		// USHORT - NON-VOL - (see constants below)
+#define	XIJET_TRIGGER_OFFSET	103		// USHORT - NON-VOL config setting - photocell offset in mils.  Head specific - head index must be specified
+#define XIJET_VERT_JETS_P1		104		// USHORT - NON-VOL - active jets pen 1 - vertical stitching
+#define XIJET_VERT_JETS_P2		105		// USHORT - NON-VOL - active jets pen 2
+#define XIJET_VERT_JETS_P3		106		// USHORT - NON-VOL - active jets pen 3
+#define XIJET_VERT_JETS_P4		107		// USHORT - NON-VOL - active jets pen 4
+#define XIJET_HORZ_OFF_P1		108		// USHORT - NON-VOL - horizontal offset pen 1 - horizontal stitching (horizontal = running direction)
+#define XIJET_HORZ_OFF_P2		109		// USHORT - NON-VOL - horizontal offset pen 2
+#define XIJET_HORZ_OFF_P3		110		// USHORT - NON-VOL - horizontal offset pen 3
+#define XIJET_HORZ_OFF_P4		111		// USHORT - NON-VOL - horizontal offset pen 4
+
+// Head Index constants (used for HeadIndex parameter of GetPrinterParameter/SetPrinterParameter)
+#define XIJET_HEAD_1_INDEX		0
+#define XIJET_HEAD_2_INDEX		1
+#define XIJET_HEAD_3_INDEX		2
+#define XIJET_HEAD_4_INDEX		3
+#define XIJET_ALL_HEADS			0xffff	// get/set parameter to all heads
+
+// Head orientation constants (used with GetPrinterParameter/SetPrinterParameter/XIJET_HEAD_ORIENTATION)
+#define XIJET_HEAD_ORIENT_A		0
+#define XIJET_HEAD_ORIENT_B		1
+#define XIJET_HEAD_ORIENT_C		2
+#define XIJET_HEAD_ORIENT_D		3
+
+// Trigger type constants (used with GetPrinterParameter/SetPrinterParameter/XIJET_TRIGGER_TYPE)
+#define TRIGGER_TYPE_AUTO_GEN		0	// no physical input, print triggers automatically when print request received
+#define TRIGGER_TYPE_RISING			1	// rising edge of input
+#define TRIGGER_TYPE_FALLING		2	// falling edge of input
+#define TRIGGER_TYPE_SOFTWARE		3	// no physical input, print trigger comes via API call XIJET_SoftPrintTrigger
 
 //
 //	Warming modes
@@ -171,6 +208,7 @@ typedef struct {
 #define XIJET_WARMING_OFF		 0		// Warming off
 #define XIJET_WARMING_PRE_WARM	 1		// Pre-Warm only
 #define XIJET_WARMING_CONTINUOUS 2		// Continuous
+
 
 //
 //	Parameters constants for use in SetPrinterParameter - XIJET_RESOLUTION - NP45 only
@@ -216,7 +254,9 @@ typedef struct {
 //	Function defintions
 //
 
-double WINAPI XIJET_GetVersionAPI();
+//
+// Housekeeping Functions
+// 
 
 BOOL WINAPI XIJET_ProbePrinter(USHORT index, CHAR *printerName);
 
@@ -228,11 +268,7 @@ HANDLE WINAPI XIJET_OpenPrinter( const CHAR *printerName,
 HANDLE WINAPI XIJET_OpenPrinterW( const WCHAR *printerName,
 								  XIJET_CONFIGURATION *pPrinterConfig);
 
-void WINAPI XIJET_Reset(HANDLE printerHandle);
-
-void WINAPI XIJET_ResetPrintData(HANDLE printerHandle);
-
-void WINAPI XIJET_ResetPrintQueue(HANDLE printerHandle);
+void WINAPI XIJET_ClosePrinter(HANDLE printerHandle);
 
 BOOL WINAPI XIJET_GetPrinterResolution( const CHAR *PrinterName,
 										USHORT ResolutionIndex,
@@ -241,16 +277,96 @@ BOOL WINAPI XIJET_GetPrinterResolution( const CHAR *PrinterName,
 										PUSHORT VerticalDPI,
 										PUSHORT MaxSpeedIPS);
 
+int WINAPI XIJET_GetStatus( HANDLE printerHandle,
+							CHAR *pStatusMessage);
+
+//
+// Adjusting Settings
+
 int WINAPI XIJET_GetPrinterParameter( HANDLE printerHandle,
 									  USHORT parameterIndex,
 									  PVOID pParameter,
-									  USHORT HeadNumber = 0);
+									  USHORT HeadIndex);
 
 int WINAPI XIJET_SetPrinterParameter( HANDLE printerHandle,
 									  USHORT parameterIndex,
 									  PVOID pParameter,
-									  USHORT HeadNumber = 0);
+									  USHORT HeadIndex);
+//
+// Printing functions
+//
+//
+// Canvas Mode Print Functions
+//
+HANDLE WINAPI XIJET_LoadFontXFT( HANDLE printerHandle, const char *filename);
 
+HANDLE WINAPI XIJET_LoadFontXFTwRotation( HANDLE printerHandle,
+										 const char *filename,
+										 int rotation,
+										 int codePages[] = NULL);
+
+int WINAPI XIJET_CanvasBegin( HANDLE printerHandle,
+							  ULONG VerticalHeight,
+							  ULONG HorizontalWidth);
+
+int WINAPI XIJET_CanvasWrite( HANDLE printerHandle,
+							  ULONG VerticalOffset,
+							  ULONG HorizontalOffset,
+							  ULONG VerticalHeight,
+							  ULONG HorizontalWidth,
+							  UCHAR *pBitmappedBuffer);
+
+int WINAPI XIJET_CanvasWriteStr( HANDLE printerHandle,
+								 HANDLE fontHandle,
+								 const char *asciiStr,
+								 ULONG VerticalOffset,
+								 ULONG HorizontalOffset,
+								 ULONG LineToLineOffset = -1);
+
+int WINAPI XIJET_CanvasWriteStrRotation( HANDLE printerHandle,
+								 HANDLE fontHandle,
+								 const WCHAR *asciiStr,
+								 ULONG Vertical_Top,
+								 ULONG Horizontal_Left,
+								 ULONG Vertical_Bot,
+								 ULONG Horizontal_Right,
+								 int rotation,				// primary rotation 0, 90, 180, 270
+								 int align,
+								 int reverseVideo,
+								 int wordWrap,
+								 int mirror,
+								 int bottomJustify,
+								 int isVariableData,
+								 ULONG *pTextHeight,	// ok to pass NULL if not interested in resultant height or width
+								 ULONG *pTextWidth,
+								 ULONG LineToLineOffset = -1,
+								 ULONG CharToCharOffset = -1,
+								 int skewRotation = 0,
+								 int inkDensity = 0);	// 0 = full; else 8 (dark) down to 1 (light)
+
+int WINAPI XIJET_CanvasSave(HANDLE printerHandle);
+
+int WINAPI XIJET_CanvasPrint( HANDLE printerHandle,
+							  ULONG Head1Offset,
+							  ULONG Head2Offset,
+							  ULONG Head3Offset,
+							  ULONG Head4Offset,
+							  ULONG Timeout);
+
+int WINAPI XIJET_CanvasPrintExt( HANDLE printerHandle,
+								 USHORT PrintID,
+								 ULONG *HeadVertOffsets,
+								 ULONG Timeout,
+								 USHORT PrintFlags,
+								 int *pPercentComplete,
+								 float *pTransportSpeedIPS,
+								 BOOL *pPrintCompletedFlag,
+								 USHORT *pPrintIDcompleted,
+								 ULONG *pCompletedPositionMils);
+
+//
+// Page Mode Print Functions
+//
 int WINAPI XIJET_PrintDocumentPage( HANDLE printerHandle,
 								    ULONG VerticalHeight,
 									ULONG HorizontalWidth,
@@ -280,82 +396,13 @@ int WINAPI XIJET_QueueOutputToggle( HANDLE printerHandle,
 
 int WINAPI XIJET_SoftPrintTrigger( HANDLE printerHandle);
 
-//
-// Canvas mode functions...
-//
-HANDLE WINAPI XIJET_LoadFontXFT( HANDLE printerHandle, const char *filename);
-
-HANDLE WINAPI XIJET_LoadFontXFTwRotation( HANDLE printerHandle,
-										 const char *filename,
-										 int rotation,
-										 int codePages[]);
-
-int WINAPI XIJET_CanvasBegin( HANDLE printerHandle,
-							  ULONG VerticalHeight,
-							  ULONG HorizontalWidth);
-
-int WINAPI XIJET_CanvasWrite( HANDLE printerHandle,
-							  ULONG VerticalOffset,
-							  ULONG HorizontalOffset,
-							  ULONG VerticalHeight,
-							  ULONG HorizontalWidth,
-							  UCHAR *pBitmappedBuffer);
-
-int WINAPI XIJET_CanvasWriteRGB( HANDLE printerHandle,
-								 ULONG VerticalOffset,
-								 ULONG HorizontalOffset,
-								 ULONG VerticalHeight,
-								 ULONG HorizontalWidth,
-								 LPVOID pPixelBuffer);
-
-int WINAPI XIJET_CanvasWriteStr( HANDLE printerHandle,
-								 HANDLE fontHandle,
-								 const char *asciiStr,
-								 ULONG VerticalOffset,
-								 ULONG HorizontalOffset,
-								 ULONG LineToLineOffset = -1);
-
-int WINAPI XIJET_CanvasWriteStrRotation( HANDLE printerHandle,
-								 HANDLE fontHandle,
-								 const WCHAR *asciiStr,
-								 ULONG Vertical_Top,
-								 ULONG Horizontal_Left,
-								 ULONG Vertical_Bot,
-								 ULONG Horizontal_Right,
-								 int rotation,				// primary rotation 0, 90, 180, 270
-								 int align,
-								 int reverseVideo,
-								 int wordWrap,
-								 int mirror,
-								 int bottomJustify,
-								 int isVariableData,
-								 ULONG *pTextHeight,
-								 ULONG *pTextWidth,
-								 ULONG LineToLineOffset = -1,
-								 ULONG CharToCharOffset = -1,
-								 int skewRotation = 0);
-
-int WINAPI XIJET_CanvasPrint( HANDLE printerHandle,
-							  ULONG Head1Offset,
-							  ULONG Head2Offset,
-							  ULONG Head3Offset,
-							  ULONG Head4Offset,
-							  ULONG Timeout);
-
-int WINAPI XIJET_CanvasPrintExt( HANDLE printerHandle,
-								 USHORT PrintID,
-								 ULONG *HeadVertOffsets,
-								 ULONG Timeout,
-								 USHORT PrintFlags,
-								 int *pPercentComplete,
-								 float *pTransportSpeedIPS,
-								 BOOL *pPrintCompletedFlag,
-								 USHORT *pPrintIDcompleted,
-								 ULONG *pCompletedPositionMils);
 
 //
 // status/misc functions...
 //
+
+double WINAPI XIJET_GetVersionAPI();
+
 int WINAPI XIJET_WaitForPrintComplete( HANDLE printerHandle,
 									   ULONG timeoutMSecs);
 
@@ -365,8 +412,34 @@ int WINAPI XIJET_WaitForPrintCompleteExt( HANDLE printerHandle,
 										  USHORT *pPrintIDcompleted,
 										  ULONG *pCompletedPositionMils);
 
-int WINAPI XIJET_GetStatus( HANDLE printerHandle,
-							CHAR *pStatusMessage);
+void WINAPI XIJET_Reset(HANDLE printerHandle);
+
+void WINAPI XIJET_ResetPrintData(HANDLE printerHandle);
+
+void WINAPI XIJET_ResetPrintQueue(HANDLE printerHandle);
+
+
+
+//
+//	XIJET_ResetInkCartridge
+//
+//	This call is now only applicable to HP based systems.
+//	In order to be of any use, the cartridge based ink tracking, the
+//	cartridge must remain in the same stall for its life.
+//	When a new cartridge is installed, this function will reset
+//	the level being maintained by the firmware.
+
+int WINAPI XIJET_ResetInkCartridge( HANDLE printerHandle,
+									USHORT headIndex,
+									USHORT penIndex);
+//
+//	XIJET_GetInkRemaining
+//
+//	For Funai/Lexmark based cartridge systems, ink levels is being maintained
+//  in the file \XiJet\Common\InkTrackLX.bin.  Based on a 16-bit cartridge ID
+//	this allows for cartridges to be swapped in and out amonst different stalls
+//	For HP based systems the cartridge must remain in the same stall 
+//	for its 'life'
 
 int WINAPI XIJET_GetInkRemaining( HANDLE printerHandle,
 								  USHORT headIndex,
@@ -395,16 +468,30 @@ int WINAPI XIJET_GetTransportSpeed( HANDLE printerHandle,
 int WINAPI XIJET_GetTransportSpeedExt( const CHAR *printerName,
 									   float *transportSpeedIPS);
 
-int WINAPI XIJET_ResetInkCartridge( HANDLE printerHandle,
-									USHORT headIndex,
-									USHORT penIndex);
+double WINAPI XIJET_GetVersionEmbedded(HANDLE printerHandle);
 
-void WINAPI XIJET_ClosePrinter(HANDLE printerHandle);
+ULONG WINAPI XIJET_TestUSB( HANDLE printerHandle);
+
+//
+//	XIJET_ActivatePens, XIJET_DeactivatePens
+//
+//	Power-up and Power-down of the cartridges are normally handled
+//	automatically by the firmware.  Under special circumstances
+//  cartridges may be powered 'manually' via these calls.
 
 int WINAPI XIJET_ActivatePens( HANDLE printerHandle);
 
 int WINAPI XIJET_DeactivatePens( HANDLE printerHandle);
 
+//
+//	XIJET_ActivateInkPurge
+//
+//	the only call still supported is a 1-time ejection of drops
+//
+//	To expel 200 drops per nozzle, the call is:
+//
+//  XIJET_ActivateInkPurge( printerHandle, PMT_MODE_SPIT, 200, 0, 0, 0);
+//
 int WINAPI XIJET_ActivateInkPurge( HANDLE printerHandle,
 								   UCHAR  purgeMode,
 								   ULONG  purgeParameter1 = 0,
@@ -413,17 +500,16 @@ int WINAPI XIJET_ActivateInkPurge( HANDLE printerHandle,
 								   ULONG  purgeParameter4 =0
 								   );
 
-int WINAPI XIJET_SelectPens( HANDLE printerHandle, ULONG bmPensSelect);
-
+//
+//	XIJET_OpenLogFile, XIJET_CloseLogFile
+//
+//	will direct diagnostic output to a log file
+//
 FILE* WINAPI XIJET_OpenLogFile(const char *filename);
 
 void WINAPI XIJET_CloseLogFile();
 
 void WINAPI XIJET_logMessage(const char *funcName, const char *msg);
-
-double WINAPI XIJET_GetVersionEmbedded(HANDLE printerHandle);
-
-ULONG WINAPI XIJET_TestUSB( HANDLE printerHandle);
 
 //
 // 'board' level calls to comunicate with a specific controller.
