@@ -21,6 +21,9 @@ namespace XIJET_PrintService
         private static int LastBitBufferUsed = 0;
         const ushort XIJET_TRIGGER_TYPE = 102;// USHORT - NON-VOL - (see constants below)
         const ushort XIJET_TRIGGER_MASK =   9;		// ULONG -	Mask print trigger for distance (in mils)
+//        static short trigger_mask_value = 5500; // 5.5 inches
+//        static short trigger_type_value = 1; // trigger type rising
+        static short triggerOffset = 6350; // 6 inches in mils
 
 
 
@@ -68,29 +71,33 @@ namespace XIJET_PrintService
             //Set Parameter
             ///////////////
             //            short resParameter = 7; // 300x300 dark
+            //           resParameter = 0; // 300x300 Fast
             short resParameter = 12; // 300x300 Normal
- //           resParameter = 0; // 300x300 Fast
+
             if (dblWidth)  resParameter = 1; // 600x300 dark
             //            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
             short headOrientation = 1;
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
-//            short printDelay = 2000;
+            //            short printDelay = 2000;
             short trigger_mask_value = 5500; // 5.5 inches
             short trigger_type_value = 1; // trigger type rising
+            short triggerOffset = 6350;
+            
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle,XIJET_TRIGGER_MASK,&trigger_mask_value);
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
 //            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
 
             short hOff1 = 0;
             short hOff2 = 1012;
             short hOff3 = 2022;
-            short hOff4 = 3032;
+            short hOff4 = 3032; /*
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 108, &hOff1);
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 109, &hOff2);
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 110, &hOff3);
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 111, &hOff4);
-
+            */
             // this GetStatus call may be blowing things up later.  Very hard to tell.
             //XIJET.GetStatus(PrinterHandle, pStatusMessage); // was missing call to get status
             Console.WriteLine("Status: " + Marshal.PtrToStringAnsi(pStatusMessage));
@@ -115,7 +122,7 @@ namespace XIJET_PrintService
             IntPtr subSample = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
             IntPtr jetBlanking = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
             IntPtr auxOutput = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
-            IntPtr triggerOffset = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            IntPtr triggerOffsetptr = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
             IntPtr headHeight = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
             IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));
             IntPtr penWarming = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
@@ -128,7 +135,7 @@ namespace XIJET_PrintService
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.JET_BLANKING, jetBlanking);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.AUX_OUTPUT, auxOutput);
-            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffset);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.HEAD_HEIGHT, headHeight);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.PEN_WARMING, penWarming);
@@ -141,12 +148,14 @@ namespace XIJET_PrintService
             Console.WriteLine("PARAM - SUB_SAMPLE: " + Marshal.ReadInt16(subSample));
             Console.WriteLine("PARAM - JET_BLANKING: " + Marshal.ReadInt16(jetBlanking));
             Console.WriteLine("PARAM - AUX_OUTPUT: " + Marshal.ReadInt16(auxOutput));
-            Console.WriteLine("PARAM - TRIGGER_OFFSET: " + Marshal.ReadInt16(triggerOffset));
+            Console.WriteLine("PARAM - TRIGGER_OFFSET: " + Marshal.ReadInt16(triggerOffsetptr));
             Console.WriteLine("PARAM - HEAD_HEIGHT: " + Marshal.ReadInt16(headHeight));
             Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
             Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
             Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
             Console.WriteLine("PARAM - INK_PROFILE - temperature: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).temperature);
+            Console.WriteLine("PARAM - INK_PROFILE - voltage: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).voltage);
+
             Console.WriteLine("PARAM - PEN_WARMING: " + Marshal.ReadInt16(penWarming));
             Console.WriteLine("PARAM - TRIGGER_MASK: " + Marshal.ReadIntPtr(triggerMask));
             Console.WriteLine("PARAM - RESOLUTION_DIRECT - resVerticalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resVerticalDPI);
@@ -160,7 +169,7 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(subSample);
             Marshal.FreeHGlobal(jetBlanking);
             Marshal.FreeHGlobal(auxOutput);
-            Marshal.FreeHGlobal(triggerOffset);
+            Marshal.FreeHGlobal(triggerOffsetptr);
             Marshal.FreeHGlobal(headHeight);
             Marshal.FreeHGlobal(inkProfile);
             Marshal.FreeHGlobal(penWarming);
@@ -169,9 +178,29 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(skipTrigDetect);
         }
 
-        public static void Flush()
+        public static void Flush(bool dblWidth)
         {
+            int XiJetStatus;
+
             XIJET.Reset(PrinterHandle);
+            short resParameter = 12; // 300x300 Normal
+                                     //           resParameter = 0; // 300x300 Fast
+            if (dblWidth) resParameter = 1; // 600x300 dark
+            //            short resParameter = 0; // 600x600
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
+            short headOrientation = 1;
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
+            //            short printDelay = 2000;
+            short trigger_mask_value = 5500; // 5.5 inches
+            short trigger_type_value = 1; // trigger type rising
+            short triggerOffset = 6350;
+
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, &trigger_mask_value);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
+            //            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
+
+
         }
         public static void Close()
         {
@@ -181,7 +210,7 @@ namespace XIJET_PrintService
             initialized = false;
         }
 
-        public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=100)
+        public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=0)
         {
 
             XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight + yoffset));  //hast to be long enough

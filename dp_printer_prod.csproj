@@ -21,7 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="res\XIJET_API.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 </Project>

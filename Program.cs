@@ -13,12 +13,12 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using XIJET_PrintService;
 
-namespace dpservice_composer
+namespace dp_printer_prod
 {
 
     class Program
     {
-        public static int yoffset = 100;
+        public static int yoffset = 0;
         public static bool dblWidth = false;
 
         static void Main(string[] args)
@@ -34,6 +34,7 @@ namespace dpservice_composer
             int imageWidth = 640;
             int imageHeight = 192;
             int lastIndex=0;
+            string tagkey;
 
             string lastBarcode= "UPCA08723321869";
 
@@ -60,15 +61,37 @@ namespace dpservice_composer
             while (!doneProcessing)
             {
                 char cmd;
+                string preamble = "";
                 
                 if (Console.KeyAvailable)
                 {
                     System.ConsoleKeyInfo keyInfo = Console.ReadKey(true);
                     cmd = char.ToUpper(keyInfo.KeyChar);
+                    preamble = "";
                     switch (cmd)
                     {
                         case 'Q':
                             doneProcessing = true;
+                            break;
+                        case '8': // eiiiiiii syringa? 
+                        case '0': // probably the beginning of a barcode
+                            if (cmd == '0') preamble = "UPCA0";
+                            if (cmd == '8') preamble = "UPCA08";
+
+                            tagkey = Console.ReadLine();
+                            tagkey = preamble + tagkey;
+                            Console.Write("Tagkey Set to: ");Console.WriteLine(tagkey);
+                            int index = JobSpoolSVC.getItemIndex(tagkey,false);
+                            if (index > 0)
+                            {
+                                JToken item = JobSpoolSVC.job["incomplete_items"][index];
+                                int qty = Int32.Parse((string)item["notprintedqty"]);
+                                Console.Write("I need "); Console.WriteLine(qty);
+                            }
+                            else
+                            {
+                                Console.WriteLine("Tagkey " + tagkey + " Not in this order");
+                            }
                             break;
                         case 'T':
                             if (BarcodeScanner.mode == "print")
@@ -118,6 +141,7 @@ namespace dpservice_composer
                             break;
                         case '-':
                             yoffset -= 5;
+                            if (yoffset < 0) yoffset = 0;
                             Console.WriteLine("yoffset: " + yoffset.ToString());
                             JobSpoolSVC.settings["yoffset"] = yoffset;
                             JobSpoolSVC.SaveSettings();
@@ -132,7 +156,7 @@ namespace dpservice_composer
   //                          System.Threading.Thread.Sleep(500);
                             break;
                         case 'I':
-                            Printer.Flush();
+                            Printer.Flush(dblWidth);
                             BarcodeScanner.init();
                             break;
                         case 'A':
@@ -173,7 +197,7 @@ namespace dpservice_composer
                             Environment.Exit(0);
                         }
                     }
-                    System.Threading.Thread.Sleep(25);
+                    System.Threading.Thread.Sleep(10);
                     if (BarcodeScanner.barcodes.Count > 0)
                     {
                         var barcode = BarcodeScanner.barcodes.Dequeue();
@@ -403,14 +427,14 @@ namespace dpservice_composer
             }
         }
 
-        public static int getItemIndex(string barcode,bool decrement=false)
+        public static int getItemIndex(string tagkey,bool decrement=false)
         {
             // use barcode to find incomplete item in list
-            if (tag2items.ContainsKey(barcode))
+            if (tag2items.ContainsKey(tagkey))
             {
-                for(int bc = 0; bc < tag2items[barcode].Count;bc++)
+                for(int bc = 0; bc < tag2items[tagkey].Count;bc++)
                 {
-                    int index = tag2items[barcode][bc];
+                    int index = tag2items[tagkey][bc];
                     int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
                     if (qty > 0)
                     {
@@ -424,7 +448,7 @@ namespace dpservice_composer
                                 completed_items.Add(job["incomplete_items"][index]);
                                 JArray incomplete_items = (JArray)job["incomplete_items"];
                                 //tag2items[barcode].Remove(index);
-                                if (tag2items[barcode].Count == 0) tag2items.Remove(barcode);
+                                if (tag2items[tagkey].Count == 0) tag2items.Remove(tagkey);
                             }
                         }
                         return index;
@@ -526,10 +550,10 @@ namespace dpservice_composer
      */
     public static class BarcodeScanner
     {
-        static string BarcodeData;
+        volatile static string BarcodeData;
         static int BarcodesRead = 0;
         static ModbusClient modbusClient;
-        static IPAddress ip_BarcodeReader1= IPAddress.Parse("192.168.16.46");
+        static IPAddress ip_BarcodeReader1= IPAddress.Parse("192.168.8.46");
         static public DataManSystem BarcodeReader1;
         static bool SensorInitialized;
         static bool PreviousSensorState;
@@ -568,7 +592,7 @@ namespace dpservice_composer
             //create Modbus object to monitor edge detection sensor on the Protos X I/O board
             try
             {
-                modbusClient = new ModbusClient("192.168.16.45", 502);
+                modbusClient = new ModbusClient("192.168.8.45", 502);
                 //open connection to Protos X and get current state of sensor
                 while (modbusClient.Connected) modbusClient.Disconnect();
                 modbusClient.Connect();
@@ -618,6 +642,10 @@ namespace dpservice_composer
         private static void SeeIfThereIsABarcode(Object source, System.Timers.ElapsedEventArgs e)
         {
             if (mode == "test") return;  // I hate short circuits
+            int x = 60;
+            while ((x-- > 0) && (BarcodeData == null)) System.Threading.Thread.Sleep(10);
+            if (x<59) Console.WriteLine("xtra-time: " + x.ToString());
+            //System.Threading.Thread.Sleep(100);
             if (BarcodeData != null)
             {
                 handleBarcode(BarcodeData);
@@ -675,10 +703,12 @@ namespace dpservice_composer
                     break;
                 case "print":
                     readArrivedTime = DateTime.Now.Ticks / 10000;
-                    if (BarcodeData == null)
-                    {
+  //                  if (BarcodeData == null)
+  //                  {
+                        int ResultId = args.ResultId;
+                        Console.WriteLine("ResultId: " + ResultId.ToString());
                         BarcodeData = args.ReadString.ToString();
-                    }
+  //                  }
                     break;
             }
             //System.Threading.Thread.Sleep(50);
@@ -716,7 +746,7 @@ namespace dpservice_composer
                     aTag.barcodeData = "No Barcode";
                     barcodes.Enqueue(aTag);
                     Console.WriteLine("Ignored out of sync barcode: " + edge1Time.ToString() +
-                        ":" + edge2Time.ToString() + ":" + readArrivedTime.ToString() +
+                        ":" + edge2Time.ToString() + ":" + (readArrivedTime-edge1Time).ToString()+
                         ":" + (edge2Time - edge1Time).ToString());
                 }
 
@@ -768,7 +798,7 @@ namespace dpservice_composer
                 {
                     if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
                     {
-                        BarcodeReader1.SendCommand("TRIGGER ON");
+                        DmccResponse response = BarcodeReader1.SendCommand("TRIGGER ON");
                       //  Console.WriteLine("Trigger ON");
                         triggerIsOn = true;
                         BarcodeData = null;
@@ -780,7 +810,7 @@ namespace dpservice_composer
 
                     if (BarcodeReader1.State == ConnectionState.Connected)
                     {
-                        BarcodeReader1.SendCommand("TRIGGER OFF");
+                        DmccResponse response = BarcodeReader1.SendCommand("TRIGGER OFF");
                       //  Console.WriteLine("Trigger Off");
                         triggerIsOn = false;
                         // check to see if barcode in 200ms

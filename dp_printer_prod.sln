@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29519.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dpservice_composer", "dpservice_composer.csproj", "{57D7FEF8-0C81-432C-9FD4-29016D693486}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dp_printer_prod", "dp_printer_prod.csproj", "{57D7FEF8-0C81-432C-9FD4-29016D693486}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
