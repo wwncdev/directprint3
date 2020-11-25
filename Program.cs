@@ -31,8 +31,8 @@ namespace dp_printer_prod
             JobSpoolSVC.watchSpool();
             bool doneProcessing = false;
 //            int yoffset = 100;
-            int imageWidth = 640;
-            int imageHeight = 192;
+            int imageWidth = 192;
+            int imageHeight = 640;
             int lastIndex=0;
             string tagkey;
 
@@ -75,18 +75,19 @@ namespace dp_printer_prod
                             break;
                         case '8': // eiiiiiii syringa? 
                         case '0': // probably the beginning of a barcode
-                            if (cmd == '0') preamble = "UPCA0";
-                            if (cmd == '8') preamble = "UPCA08";
+                            if (cmd == '0') preamble = "0";
+                            if (cmd == '8') preamble = "08";
 
                             tagkey = Console.ReadLine();
                             tagkey = preamble + tagkey;
                             Console.Write("Tagkey Set to: ");Console.WriteLine(tagkey);
-                            int index = JobSpoolSVC.getItemIndex(tagkey,false);
+                            int index = JobSpoolSVC.getItemIndex("UPCA"+tagkey,false);
                             if (index > 0)
                             {
                                 JToken item = JobSpoolSVC.job["incomplete_items"][index];
                                 int qty = Int32.Parse((string)item["notprintedqty"]);
                                 Console.Write("I need "); Console.WriteLine(qty);
+                                BarcodeScanner.handleBarcode(tagkey);
                             }
                             else
                             {
@@ -159,6 +160,10 @@ namespace dp_printer_prod
                             Printer.Flush(dblWidth);
                             BarcodeScanner.init();
                             break;
+                        case 'M':
+                            Printer.Flush(dblWidth, 5500);
+                            BarcodeScanner.init();
+                            break;
                         case 'A':
                             JobSpoolSVC.AddOneMore(lastBarcode);
                             break;
@@ -204,6 +209,7 @@ namespace dp_printer_prod
                         var index = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData,true);
                         lastIndex = index;
                         lastBarcode = "UPCA"+barcode.barcodeData;
+                        Console.WriteLine("Printing: " + lastBarcode);
                         if (index >= 0)
                         {
                             Printer.PrintBits(JobSpoolSVC.index2image[index],imageWidth*(Program.dblWidth?2:1),imageHeight,yoffset);
@@ -385,8 +391,10 @@ namespace dp_printer_prod
                         JArray tagkeys = (JArray)item["tagkeys"];
                         // Convert image to go from item to bitmap
                         int index = items.IndexOf(item);
+                        Console.Write(index.ToString()+",");
+//                        Printer.displayHex((string)item["label"]);
                         index2image.Add(index, ConvertImage((string) item["label"]));
-
+                        //Printer.displayBITS2(ConvertImage((string)item["label"]),192,640);
                         if (tagkeys.Count > 0) {
                             foreach (string tag in item["tagkeys"])
                             {
@@ -402,6 +410,7 @@ namespace dp_printer_prod
                     Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
                     status = "needs_processing";
                 }
+                Console.WriteLine();
             }
         }
 
@@ -511,11 +520,13 @@ namespace dp_printer_prod
             int o= bmp[10] + bmp[11] * 256;
             int imageWidth = bmp[18] + bmp[19] * 256;
             int imageHeight = bmp[22] + bmp[23] * 256;
+            Console.WriteLine("Width:"+imageWidth.ToString()+"  Height:"+imageHeight.ToString());
             int colorPlanes = bmp[26];
             int bitsPerPixel = bmp[28];
+            Console.WriteLine("ColorPlanes:" + colorPlanes.ToString() + "  bitsPerPixel:" + bitsPerPixel.ToString());
 
             int numBytes = imageWidth * imageHeight;
-            int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4
+            int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4 *** shit!
             byte[] Bits = new byte[(imageWidth * imageHeight) / 8];
 
             for (int y = 0; y < imageHeight; y++)
@@ -525,7 +536,7 @@ namespace dp_printer_prod
                     if ((x % 8) == 0) Bits[y * bytesPerRow + x / 8] = 0;  // initialize byte
                     byte bmpByte = bmp[o+y * imageWidth + x];
                     byte aBit = 0;
-                    if (bmpByte != 1U)
+                    if (bmpByte != 8U)
                     {
                         aBit = 1;
                     }
@@ -708,14 +719,25 @@ namespace dp_printer_prod
                         int ResultId = args.ResultId;
                         Console.WriteLine("ResultId: " + ResultId.ToString());
                         BarcodeData = args.ReadString.ToString();
+                        handleBarcode(BarcodeData);
   //                  }
                     break;
             }
             //System.Threading.Thread.Sleep(50);
         }
         public static void handleBarcode(string aBarcode){
+
+            Tag aTag = new Tag(aBarcode,0,0,0);
+            aTag.barcodeData = aBarcode;
+            barcodes.Enqueue(aTag);
+            Tags.Add(aTag);
+            BarcodesRead++;
+            return;
+            /*
             if (edges.Count > 0)
             {
+
+                
                 //    Tag aTag = new Tag(aBarcode, edge1Time, edge2Time, readArrivedTime);
                 Tag aTag = edges.Dequeue();
                 if ((readArrivedTime > aTag.edge1Time))
@@ -751,11 +773,26 @@ namespace dp_printer_prod
                 }
 
             }
+            */
+        }
+
+        private static void TriggerOff(Object source, ElapsedEventArgs e)
+        {
+            return;
+            DmccResponse response = BarcodeReader1.SendCommand("TRIGGER OFF");
+            //  Console.WriteLine("Trigger Off");
+            triggerIsOn = false;
+            // check to see if barcode in 200ms
+            edges.Enqueue(new Tag("", edge1Time, edge2Time, 0));
+            bcLagTimer.Enabled = true;
+            if (edges.Count > 1) Console.Write("*Too Many Edges?*");
         }
 
         public static void WatchForBarcode() // you were missing a return type. I've added void for now
         {
             //a sensor state of true = over a tag
+            return;
+            Timer bcTimer;
             bool CurrentSensorState=false;
             bool[] readSensorInput;
             try
@@ -810,12 +847,17 @@ namespace dp_printer_prod
 
                     if (BarcodeReader1.State == ConnectionState.Connected)
                     {
+                        bcTimer = new Timer(250);
+                        bcTimer.Elapsed += TriggerOff;
+                        bcTimer.AutoReset = false;
+                        bcTimer.Enabled = false;
+
                         DmccResponse response = BarcodeReader1.SendCommand("TRIGGER OFF");
                       //  Console.WriteLine("Trigger Off");
                         triggerIsOn = false;
                         // check to see if barcode in 200ms
                         edges.Enqueue(new Tag("", edge1Time, edge2Time, 0));
-                        bcLagTimer.Enabled = true;
+                        //bcLagTimer.Enabled = true;
                         if (edges.Count > 1) Console.Write("*Too Many Edges?*");
                     }
                 }

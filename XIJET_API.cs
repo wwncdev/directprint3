@@ -59,11 +59,11 @@ namespace XIJET_API
         public enum Params
         {
             RESOLUTION,
+            TRIGGER_OFFSET,
             QUEUE_DEPTH,
             SUB_SAMPLE,
             JET_BLANKING,
             AUX_OUTPUT,
-            TRIGGER_OFFSET,
             HEAD_HEIGHT,
             INK_PROFILE,
             PEN_WARMING,
