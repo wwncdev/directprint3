@@ -23,8 +23,8 @@ namespace XIJET_PrintService
         const ushort XIJET_TRIGGER_MASK =   9;		// ULONG -	Mask print trigger for distance (in mils)
 //        static short trigger_mask_value = 5500; // 5.5 inches
 //        static short trigger_type_value = 1; // trigger type rising
-        static short triggerOffset = 5900; // 6 inches in mils
-
+        static short triggerOffset = 5500; // 6 inches in mils
+        public static short inPrintBits = 0;
 
 
         public static bool Init(bool dblWidth=false)
@@ -66,6 +66,7 @@ namespace XIJET_PrintService
             }
             Flush(dblWidth);
             //DisplayParams();
+            inPrintBits = 0;
             initialized = true;
             return true;
         }
@@ -91,12 +92,12 @@ namespace XIJET_PrintService
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.JET_BLANKING, jetBlanking);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.AUX_OUTPUT, auxOutput);
-//            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.HEAD_HEIGHT, headHeight);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.PEN_WARMING, penWarming);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_MASK, triggerMask);
-            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION_DIRECT, resolutionDirect);
+//            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION_DIRECT, resolutionDirect);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SKIP_TRIG_DETECT, skipTrigDetect);
 
             Console.WriteLine("PARAM - RESOLUTION: " + Marshal.ReadInt16(resolution));
@@ -114,11 +115,12 @@ namespace XIJET_PrintService
 
             Console.WriteLine("PARAM - PEN_WARMING: " + Marshal.ReadInt16(penWarming));
             Console.WriteLine("PARAM - TRIGGER_MASK: " + Marshal.ReadIntPtr(triggerMask));
-            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resVerticalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resVerticalDPI);
+            Console.WriteLine("inPrintBits" + inPrintBits.ToString());
+/*            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resVerticalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resVerticalDPI);
             Console.WriteLine("PARAM - RESOLUTION_DIRECT - resHorizontalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resHorizontalDPI);
             Console.WriteLine("PARAM - RESOLUTION_DIRECT - fastModeFactor: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).fastModeFactor);
             Console.WriteLine("PARAM - RESOLUTION_DIRECT - bitsPerPixel: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).bitsPerPixel);
-            System.Threading.Thread.Sleep(500);
+ */           System.Threading.Thread.Sleep(500);
 
             Marshal.FreeHGlobal(resolution);
             Marshal.FreeHGlobal(queueDepth);
@@ -139,23 +141,26 @@ namespace XIJET_PrintService
             int XiJetStatus;
 
             XIJET.Reset(PrinterHandle);
-            short resParameter = 12; // 300x300 dark
+            short resParameter = 12; // 300x300 normal
+         //   short resParameter = 7; // 300x300 dark
                                      //           resParameter = 0; // 300x300 Fast
             if (dblWidth) resParameter = 1; // 600x300 dark
             //            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
             short headOrientation = 1;
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
+            short PrinterQueueDepthValue = 10;
+            int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
             //            short printDelay = 2000;
-            short trigger_mask_value = 2500; // 2.5  inches
-            short trigger_type_value = 1; // trigger type rising
+//            short trigger_mask_value = 2000; // 2.5  inches
+//            short trigger_type_value = 1; // trigger type rising
 
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, &trigger_mask_value);
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
+//            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, &trigger_mask_value);
+//            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
             // XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
+//            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
 
-            Console.WriteLine("Trigger offset value " + triggerOffset.ToString());
+  //          Console.WriteLine("Trigger offset value " + triggerOffset.ToString());
 
 
         }
@@ -169,44 +174,60 @@ namespace XIJET_PrintService
 
         public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=0)
         {
-
-            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight + yoffset));  //hast to be long enough
+            inPrintBits++;
+            if (inPrintBits == 1)
+            {
+                XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), (uint)(imageHeight));  //hast to be long enough
 //            XIJET.CanvasBegin(PrinterHandle, (uint)(imageWidth), 1725);  //hast to be long enough
-            XIJET.CanvasWrite(PrinterHandle,0,(uint)yoffset,(uint)imageWidth, (uint)imageHeight, Bits);
-//            XIJET.CanvasWrite(PrinterHandle, 0, 50, (uint)imageWidth, (uint)imageHeight, Bits);
-            IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
-            int XiJetStatus = 0;
-            while (XiJetStatus == 0) // keep printing from internal queue until status changes
-            {
-                XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
-            }
-            // Console.WriteLine("After Canvas Print Loop");
-            if (XiJetStatus != 1) // status indicates error, retrieve and print
-            {
-                XIJET.GetStatus(PrinterHandle, pStatusMessage);
-                //   Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
-                //   Console.WriteLine("return");
-            }
-            if (XiJetStatus < 0) // terminated with an error, issue a reset
-            {
-                //    Console.WriteLine("Reset Printer");
-                XIJET.Reset(PrinterHandle);
-                return false;
+                XIJET.CanvasWrite(PrinterHandle, 0, (uint)yoffset, (uint)imageWidth, (uint)imageHeight, Bits);
+                //            XIJET.CanvasWrite(PrinterHandle, 0, 50, (uint)imageWidth, (uint)imageHeight, Bits);
+                IntPtr pStatusMessage = Marshal.AllocHGlobal(4);
+                int XiJetStatus = 0;
+                while (XiJetStatus == 0) // keep printing from internal queue until status changes
+                {
+                    Console.Write("*");
+                    XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
+                    
+                }
+                // Console.WriteLine("After Canvas Print Loop");
+                if (XiJetStatus != 1) // status indicates error, retrieve and print
+                {
+                    Console.WriteLine("Status Code: " + XiJetStatus.ToString());
+                    XIJET.GetStatus(PrinterHandle, pStatusMessage);
+                    Console.WriteLine($"XiJet status: {0}", Marshal.PtrToStringAnsi(pStatusMessage));
+                    Console.WriteLine("return");
+                }
+                if (XiJetStatus < 0) // terminated with an error, issue a reset
+                {
+                    Console.WriteLine("Reset Printer");
+                    XIJET.Reset(PrinterHandle);
+                    inPrintBits--;
+                    return false;
+                }
+                else
+                {
+                    //Console.WriteLine("Terminated without an error");
+                    //Console.WriteLine(Marshal.PtrToStringAnsi(pStatusMessage));
+                    XiJetStatus = 0; // reset status
+                   /* 
+                    while (XiJetStatus == 0)
+                    {
+                        XiJetStatus = XIJET.WaitForPrintComplete(PrinterHandle, 100);
+                       // Console.WriteLine("wait for print complete");
+                    }
+                    //Console.WriteLine("Print Completed: " + XiJetStatus.ToString());
+                    */
+                }
+                XiJetStatus = 0;
+                Marshal.FreeHGlobal(pStatusMessage);
+                inPrintBits--;
+                return true;
             }
             else
             {
-                /*Console.WriteLine("Terminated without an error");
-                Console.WriteLine(Marshal.PtrToStringAnsi(pStatusMessage));
-                XiJetStatus = 0; // reset status
-                while (XiJetStatus == 0)
-                {
-                    XiJetStatus = XIJET.WaitForPrintComplete(PrinterHandle, 100);
-                    Console.WriteLine("wait for print complete");
-                }*/
+                Console.WriteLine("Tried to re-enter PrintBits!!!");
+                return false;
             }
-            XiJetStatus = 0;
-            Marshal.FreeHGlobal(pStatusMessage);
-            return true;
         }
 
         public static void displayHex(string imageEncoded)

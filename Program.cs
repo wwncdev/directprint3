@@ -8,9 +8,9 @@ using System.Collections.Generic;
 using System.Timers;
 using System.ComponentModel;
 using Cognex.DataMan.SDK;
-using EasyModbus;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using EasyModbus;
 using XIJET_PrintService;
 
 namespace dp_printer_prod
@@ -62,7 +62,7 @@ namespace dp_printer_prod
             {
                 char cmd;
                 string preamble = "";
-                
+//                Console.Write(".");                
                 if (Console.KeyAvailable)
                 {
                     System.ConsoleKeyInfo keyInfo = Console.ReadKey(true);
@@ -185,7 +185,7 @@ namespace dp_printer_prod
                 }
                 if (BarcodeScanner.mode == "print")
                 {
-                    BarcodeScanner.WatchForBarcode();  // always watch for barcodes or you tick off the machine
+                    BarcodeScanner.WatchTagEdge();  // always watch for barcodes or you tick off the machine
                 }
                 if (JobSpoolSVC.status == "needs_processing")
                 {
@@ -205,18 +205,30 @@ namespace dp_printer_prod
                     System.Threading.Thread.Sleep(10);
                     if (BarcodeScanner.barcodes.Count > 0)
                     {
-                        var barcode = BarcodeScanner.barcodes.Dequeue();
-                        var index = JobSpoolSVC.getItemIndex("UPCA"+barcode.barcodeData,true);
-                        lastIndex = index;
-                        lastBarcode = "UPCA"+barcode.barcodeData;
-                        Console.WriteLine("Printing: " + lastBarcode);
-                        if (index >= 0)
+                        if (Printer.inPrintBits == 0)
                         {
-                            Printer.PrintBits(JobSpoolSVC.index2image[index],imageWidth*(Program.dblWidth?2:1),imageHeight,yoffset);
-                        }
-                        else
-                        {
-                            Printer.PrintBits(JobSpoolSVC.goatImage,imageWidth * (Program.dblWidth ? 2 : 1), imageHeight,yoffset);
+                            var barcode = BarcodeScanner.barcodes.Dequeue();
+                            var index = JobSpoolSVC.getItemIndex("UPCA" + barcode.barcodeData, true);
+                            lastIndex = index;
+                            lastBarcode = "UPCA" + barcode.barcodeData;
+                            //Console.Write("Index: " + index.ToString());
+                            //Console.WriteLine("Printing: " + lastBarcode);
+                            if (index >= 0)
+                            {
+                                JToken item = JobSpoolSVC.job["incomplete_items"][index];
+                                int qty = Int32.Parse((string)item["notprintedqty"]);
+                                int lineno = Int32.Parse((string)item["lineno"]);
+                                string item_description = (string)item["item_description"];
+                                Console.WriteLine(item_description);
+                                Console.WriteLine(item_description);
+                                Console.WriteLine("LineNo:"+lineno.ToString()+" UPC:" + barcode.barcodeData + " " + qty.ToString() + " still needed");
+                                Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
+                            }
+                            else
+                            {
+                                 Printer.PrintBits(JobSpoolSVC.goatImage, imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
+                                Console.WriteLine("Goat PRINTED");
+                            }
                         }
                     }
                 }
@@ -528,6 +540,7 @@ namespace dp_printer_prod
             int numBytes = imageWidth * imageHeight;
             int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4 *** shit!
             byte[] Bits = new byte[(imageWidth * imageHeight) / 8];
+            byte whitey = bmp[o];  // we'll just agree never to write to 0,0
 
             for (int y = 0; y < imageHeight; y++)
             {
@@ -535,11 +548,7 @@ namespace dp_printer_prod
                 {
                     if ((x % 8) == 0) Bits[y * bytesPerRow + x / 8] = 0;  // initialize byte
                     byte bmpByte = bmp[o+y * imageWidth + x];
-                    byte aBit = 0;
-                    if (bmpByte != 8U)
-                    {
-                        aBit = 1;
-                    }
+                    byte aBit = (bmpByte != whitey) ?(byte)1:(byte)0;
                     Bits[(y * bytesPerRow) + (x / 8)] += (byte)(aBit << 7 - ((x % 8))); // added the 7- to test msb lsb issue
                 }
             }
@@ -561,7 +570,7 @@ namespace dp_printer_prod
      */
     public static class BarcodeScanner
     {
-        volatile static string BarcodeData;
+        volatile static string BarcodeData="INITIAL BARCODE";
         static int BarcodesRead = 0;
         static ModbusClient modbusClient;
         static IPAddress ip_BarcodeReader1= IPAddress.Parse("192.168.8.46");
@@ -572,7 +581,7 @@ namespace dp_printer_prod
         static long edge2Time;
         static long readArrivedTime;
 
-        static bool triggerIsOn = false;
+        static bool triggerIsOn = true;
         public static Queue<Tag> barcodes;
         public static Queue<Tag> edges;
         static List<Tag> Tags;
@@ -714,13 +723,10 @@ namespace dp_printer_prod
                     break;
                 case "print":
                     readArrivedTime = DateTime.Now.Ticks / 10000;
-  //                  if (BarcodeData == null)
-  //                  {
-                        int ResultId = args.ResultId;
-                        Console.WriteLine("ResultId: " + ResultId.ToString());
-                        BarcodeData = args.ReadString.ToString();
-                        handleBarcode(BarcodeData);
-  //                  }
+                    int ResultId = args.ResultId;
+                  //  Console.WriteLine("ResultId: " + ResultId.ToString());
+                    BarcodeData = args.ReadString.ToString();
+                    handleBarcode(BarcodeData);
                     break;
             }
             //System.Threading.Thread.Sleep(50);
@@ -733,47 +739,6 @@ namespace dp_printer_prod
             Tags.Add(aTag);
             BarcodesRead++;
             return;
-            /*
-            if (edges.Count > 0)
-            {
-
-                
-                //    Tag aTag = new Tag(aBarcode, edge1Time, edge2Time, readArrivedTime);
-                Tag aTag = edges.Dequeue();
-                if ((readArrivedTime > aTag.edge1Time))
-                {
-                    aTag.readArrivedTime = readArrivedTime;
-                    aTag.barcodeData = aBarcode;
-                    barcodes.Enqueue(aTag);
-                    Tags.Add(aTag);
-                    BarcodesRead++;
-                    Console.Write(BarcodesRead.ToString() + ": " + JobSpoolSVC.Aslen(aBarcode, 15));
-                    int index = JobSpoolSVC.getItemIndex("UPCA" + aBarcode);
-                    if (index >= 0)
-                    {
-                        JToken item = (JToken)JobSpoolSVC.job["incomplete_items"][index];
-                        int howManyPrinted = (int)item["printqty"] - (int)item["notprintedqty"] + 1;
-                        Console.Write(howManyPrinted.ToString("D3") + "  " + aTag.Elapsed().ToString("D5"));
-                        if ((int)item["notprintedqty"] <= 1) Console.Write("  ** Completed  ");
-                        Console.WriteLine();
-                    }
-                    else
-                    {
-                        Console.WriteLine(" Overage");
-                    }
-                    Log.WriteLine(aBarcode + ": queulen" + barcodes.Count.ToString());
-                }
-                else
-                {
-                    aTag.barcodeData = "No Barcode";
-                    barcodes.Enqueue(aTag);
-                    Console.WriteLine("Ignored out of sync barcode: " + edge1Time.ToString() +
-                        ":" + edge2Time.ToString() + ":" + (readArrivedTime-edge1Time).ToString()+
-                        ":" + (edge2Time - edge1Time).ToString());
-                }
-
-            }
-            */
         }
 
         private static void TriggerOff(Object source, ElapsedEventArgs e)
@@ -788,10 +753,8 @@ namespace dp_printer_prod
             if (edges.Count > 1) Console.Write("*Too Many Edges?*");
         }
 
-        public static void WatchForBarcode() // you were missing a return type. I've added void for now
+        public static void WatchTagEdge() // you were missing a return type. I've added void for now
         {
-            //a sensor state of true = over a tag
-            return;
             Timer bcTimer;
             bool CurrentSensorState=false;
             bool[] readSensorInput;
@@ -833,47 +796,26 @@ namespace dp_printer_prod
                 }
                 else if (SensorInitialized == true & CurrentSensorState == true)  // over a tag
                 {
+                    if (BarcodeData == null) {
+                        handleBarcode("BAD DATA");
+                        Console.Write("BAD DATA"); 
+                    }
+                    BarcodeData = null;
                     if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
                     {
+                        Console.WriteLine("This might never be called?");
                         DmccResponse response = BarcodeReader1.SendCommand("TRIGGER ON");
-                      //  Console.WriteLine("Trigger ON");
+                        //  Console.WriteLine("Trigger ON");
                         triggerIsOn = true;
-                        BarcodeData = null;
                     }
                 }
                 else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
                 {
-//                    System.Threading.Thread.Sleep(200);  // give a little time past bottom edge for barcode to be sent -tw
 
-                    if (BarcodeReader1.State == ConnectionState.Connected)
-                    {
-                        bcTimer = new Timer(250);
-                        bcTimer.Elapsed += TriggerOff;
-                        bcTimer.AutoReset = false;
-                        bcTimer.Enabled = false;
-
-                        DmccResponse response = BarcodeReader1.SendCommand("TRIGGER OFF");
-                      //  Console.WriteLine("Trigger Off");
-                        triggerIsOn = false;
-                        // check to see if barcode in 200ms
-                        edges.Enqueue(new Tag("", edge1Time, edge2Time, 0));
-                        //bcLagTimer.Enabled = true;
-                        if (edges.Count > 1) Console.Write("*Too Many Edges?*");
-                    }
                 }
             }
       //      Console.Write("/");
         }
- 
-        private static void MonitorEdgeSensor_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            if (e.Error != null)
-            {
-                //ProgramStatus.Text = e.Error.Message;
-                Console.WriteLine(e.Error.Message);
-            }
-        }
-
 
     }
 
