@@ -217,16 +217,18 @@ namespace dp_printer_prod
                             {
                                 JToken item = JobSpoolSVC.job["incomplete_items"][index];
                                 int qty = Int32.Parse((string)item["notprintedqty"]);
+                                int printqty = Int32.Parse((string)item["printqty"]);
+                                int printnumber = printqty - qty;
                                 int lineno = Int32.Parse((string)item["lineno"]);
                                 string item_description = (string)item["item_description"];
-                                Console.WriteLine(item_description);
-                                Console.WriteLine(item_description);
-                                Console.WriteLine("LineNo:"+lineno.ToString()+" UPC:" + barcode.barcodeData + " " + qty.ToString() + " still needed");
-                                Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
+                                item_description = item_description.PadRight(40).Remove(35);
+                                Console.WriteLine("LineNo:"+lineno.ToString().PadLeft(5)+" "+item_description+" UPC:" + barcode.barcodeData + " " + 
+                                    printnumber.ToString().PadLeft(5) + " of "+printqty.ToString());
+                                //Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
                             }
                             else
                             {
-                                 Printer.PrintBits(JobSpoolSVC.goatImage, imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
+                                 //Printer.PrintBits(JobSpoolSVC.goatImage, imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
                                 Console.WriteLine("Goat PRINTED");
                             }
                         }
