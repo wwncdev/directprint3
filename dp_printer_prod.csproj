@@ -6,6 +6,9 @@
     <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
+    <None Remove="bak_EasyModbus.dll" />
+  </ItemGroup>
+  <ItemGroup>
     <Reference Include="Cognex.Dataman.SDK.PC">
       <HintPath>Cognex.Dataman.SDK.PC.dll</HintPath>
     </Reference>
