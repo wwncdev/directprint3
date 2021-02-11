@@ -87,7 +87,9 @@ namespace dp_printer_prod
                                 JToken item = JobSpoolSVC.job["incomplete_items"][index];
                                 int qty = Int32.Parse((string)item["notprintedqty"]);
                                 Console.Write("I need "); Console.WriteLine(qty);
-                                BarcodeScanner.handleBarcode(tagkey);
+                                //                                BarcodeScanner.handleBarcode(tagkey);
+                                BarcodeScanner.BarcodeData = tagkey;
+                                
                             }
                             else
                             {
@@ -95,19 +97,8 @@ namespace dp_printer_prod
                             }
                             break;
                         case 'T':
-                            if (BarcodeScanner.mode == "print")
-                            {
-                                BarcodeScanner.SetTestMode();
-                                Console.WriteLine("Now in Test Mode");
-                            }
-                            else
-                            {
-                                BarcodeScanner.SetPrintMode();
-                                Console.WriteLine("Now in Print Mode");
-                            }
-
-                            break;
-                        case 'L':
+                            BarcodeScanner.simulateTagIsWaiting = true;
+                            BarcodeScanner.triggerBeginTime = DateTime.Now.Ticks;
                             if (BarcodeScanner.initialized)
                             {
                                 BarcodeScanner.DisplayLog();
@@ -164,9 +155,12 @@ namespace dp_printer_prod
                             Printer.Flush(dblWidth, 5500);
                             BarcodeScanner.init();
                             break;
-                        case 'A':
-                            JobSpoolSVC.AddOneMore(lastBarcode);
+                        case 'V':
+                            // vacuum feed advance
+                            BarcodeScanner.VacuumFeedAdvance();
+                            Console.WriteLine("Vacuum Feed Advance");
                             break;
+
                         default:
                             displayHelp();
                             break;
@@ -303,7 +297,7 @@ namespace dp_printer_prod
     {
         static Timer aTimer;
         public static string status = "starting";
-        const string jobfiledir = @"c:/jobfiles/";
+        const string jobfiledir = @"c:\\jobfiles\\";
         static String spooldir;
         static String processdir;
         static String archivedir;
@@ -323,9 +317,9 @@ namespace dp_printer_prod
 
         public static void Start()
         {
-            spooldir = jobfiledir + "spooled/";
-            processdir = jobfiledir + "processing/";
-            archivedir = jobfiledir + "archive/";
+            spooldir = jobfiledir + "spooled\\";
+            processdir = jobfiledir + "processing\\";
+            archivedir = jobfiledir + "archive\\";
             settingsFile = jobfiledir + "settings.json";
 
             uint flag = 0;
@@ -336,7 +330,7 @@ namespace dp_printer_prod
 
             aTimer = new Timer(200);
             aTimer.Elapsed += CheckSpoolDirEvent;
-            aTimer.AutoReset = true;
+            aTimer.AutoReset = false;  // I think this is the reason this code was almost impossible to debug
             //            aTimer.Enabled = true;
             status = "started";
         }
@@ -572,7 +566,7 @@ namespace dp_printer_prod
      */
     public static class BarcodeScanner
     {
-        volatile static string BarcodeData="INITIAL BARCODE";
+        public volatile static string BarcodeData="INITIAL BARCODE";
         static int BarcodesRead = 0;
         static ModbusClient modbusClient;
         static IPAddress ip_BarcodeReader1= IPAddress.Parse("192.168.8.46");
@@ -582,7 +576,7 @@ namespace dp_printer_prod
         static long edge1Time;
         static long edge2Time;
         static long readArrivedTime;
-        static bool currentTagIsWaiting = false;
+        volatile static bool currentTagIsWaiting = false;
         static bool previousTagIsWaiting = false;
 
         static bool triggerIsOn = true;
@@ -596,11 +590,12 @@ namespace dp_printer_prod
         public static string mode = "print";  // or test
 
         static int timerInterval = 50;
-        static int BarcodeReaderTimeout = 500;
+        static int BarcodeReaderTimeout = 1500;
         static int TimeoutCounter = 0;
         static bool TagAutoMode = false;
 
-        static long triggerBeginTime = 0;
+        public static long triggerBeginTime = 0;
+        public static bool simulateTagIsWaiting = false;
 
 
         public static void Start()
@@ -650,7 +645,6 @@ namespace dp_printer_prod
             }
             initialized = true;
         }
-
         public static void SetTestMode()
         {
             mode = "test";
@@ -669,31 +663,6 @@ namespace dp_printer_prod
             barcodes.Clear();
             edges.Clear();
             PreviousSensorState = false;
-        }
-        private static void SeeIfThereIsABarcode(Object source, System.Timers.ElapsedEventArgs e)
-        {
-            if (mode == "test") return;  // I hate short circuits
-            int x = 60;
-            while ((x-- > 0) && (BarcodeData == null)) System.Threading.Thread.Sleep(10);
-            if (x<59) Console.WriteLine("xtra-time: " + x.ToString());
-            //System.Threading.Thread.Sleep(100);
-            if (BarcodeData != null)
-            {
-                handleBarcode(BarcodeData);
-                lastBarcode = BarcodeData;
-            }
-            else
-            {
-                if (allowGuessing && lastBarcode != null)
-                {
-                    Console.WriteLine("*******  Took a Guess *******");
-                    handleBarcode(lastBarcode);
-                }
-                else
-                {
-                    handleBarcode("No Barcode");
-                }
-            }
         }
         public static void DisplayLog()
         {
@@ -723,50 +692,31 @@ namespace dp_printer_prod
                 }
             }
         }
-        /*
-        private static void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
-        {
-            //Console.Write((DateTime.Now.Ticks/10000).ToString()+":ReadStringArrived: ");
-            switch (mode)
-            {
-                case "test":
-                    Console.WriteLine(args.ReadString.ToString());
-                    BarcodeReader1.SendCommand("TRIGGER ON");
-                    break;
-                case "print":
-                    readArrivedTime = DateTime.Now.Ticks / 10000;
-                    int ResultId = args.ResultId;
-                  //  Console.WriteLine("ResultId: " + ResultId.ToString());
-                    BarcodeData = args.ReadString.ToString();
-                    handleBarcode(BarcodeData);
-                    break;
-            }
-            //System.Threading.Thread.Sleep(50);
-        }
-
-        */
 
         private static void BarcodeReader1_ReadStringArrived(object sender, ReadStringArrivedEventArgs args)
         {
             BarcodeData = args.ReadString.ToString();
-            if (BarcodeData == "BAD DATA")
+            Console.WriteLine("ReadStringArrived:" + BarcodeData);
+        }
+
+        public static bool handleBarcode(string aBarcode){
+
+            var index = JobSpoolSVC.getItemIndex("UPCA" + aBarcode, false);
+            if (index >= 0)
             {
-
+                Tag aTag = new Tag(aBarcode, 0, 0, 0);
+                aTag.barcodeData = aBarcode;
+                barcodes.Enqueue(aTag);
+                Tags.Add(aTag);
+                BarcodesRead++;
+                return true;
             }
-            else { 
-                handleBarcode(BarcodeData);
+            else
+            {
+                return false;
             }
         }
 
-        public static void handleBarcode(string aBarcode){
-
-            Tag aTag = new Tag(aBarcode,0,0,0);
-            aTag.barcodeData = aBarcode;
-            barcodes.Enqueue(aTag);
-            Tags.Add(aTag);
-            BarcodesRead++;
-            return;
-        }
 
         private static void TriggerOff(Object source, ElapsedEventArgs e)
         {
@@ -783,9 +733,30 @@ namespace dp_printer_prod
 
         public static bool GetTagIsWaiting()
         {
-            bool[] arrayReadCoils = modbusClient.ReadCoils(0, 1);
+            bool[] arrayReadCoils = { false, false, false, false, false, false, false, false, false };
+            if (simulateTagIsWaiting)
+            {
+                arrayReadCoils[0] = true;
+            }
+            else
+            {
+                try
+                {
+                    arrayReadCoils = modbusClient.ReadCoils(0, 1);
+                }
+                catch (Exception e)
+                {
+
+                }
+            }
             currentTagIsWaiting = arrayReadCoils[0];
             return currentTagIsWaiting;
+        }
+
+        public static void VacuumFeedAdvance()
+        {
+            modbusClient.WriteSingleCoil(1, true);
+
         }
 
         public static void WatchTagIsReadyToBeScanned()
@@ -802,12 +773,14 @@ namespace dp_printer_prod
                 we add an interval amount to the counter in order to determine when the timeout has been reached */
                 {
                     //TimeoutCounter += timerInterval;  // rewrite as timeElapsed in ms
-                    long timeElapsed = (System.DateTime.Now.Ticks - triggerBeginTime) / 10000; // tickspermilliseconds = 10,000?
+                    long timeElapsed = (triggerBeginTime>0)?(System.DateTime.Now.Ticks - triggerBeginTime) / 10000:0; // tickspermilliseconds = 10,000?
                     if (timeElapsed >= BarcodeReaderTimeout || BarcodeData != null)  // changed == to >=
                     {
+                        Console.WriteLine("End Waiting For Barcode:" + BarcodeData);
+                        //modbusClient.WriteSingleCoil(0, false);
+                        triggerBeginTime = 0;
                         if (BarcodeReader1.State == ConnectionState.Connected)
                             BarcodeReader1.SendCommand("TRIGGER OFF");
-
                         if (BarcodeData != null)
                         {
                             //the barcode was successfully read
@@ -820,7 +793,17 @@ namespace dp_printer_prod
                             //BarcodeNumber.Content = BarcodeData;
                             //handleBarcode(BarcodeData);  oops - already handled in readstringarrived.
                             Console.WriteLine(BarcodeData);
-                            BarcodeData = null;
+                            simulateTagIsWaiting = false;
+
+                            if (handleBarcode(BarcodeData))
+                            {
+                                VacuumFeedAdvance();
+                            }
+                            else
+                            {
+                                Console.WriteLine("TAG NOT FOUND IN ORDER OR TOO MANY\nPress V to advance");
+                            }
+                            BarcodeData = null; currentTagIsWaiting = false;  // mission accomplished
                         }
                         else
                         {
@@ -832,7 +815,9 @@ namespace dp_printer_prod
                                 modbusClient.WriteSingleCoil(2, true);
 
                             // BarcodeNumber.Content = "No Read";
-                            Console.WriteLine("No Read");
+                            simulateTagIsWaiting = false;
+                           // Console.WriteLine("No Read:"+timeElapsed.ToString());
+                            currentTagIsWaiting = false;
                         }
                     }
                 }
@@ -843,80 +828,18 @@ namespace dp_printer_prod
                 if (currentTagIsWaiting)
                 //flag was previously false and changed to true; a tag is in position and ready to be read; turn on the reader
                 {
+                    BarcodeData = null;
                     if (BarcodeReader1.State == ConnectionState.Connected)
                         BarcodeReader1.SendCommand("TRIGGER ON");
                     TimeoutCounter = 0;
-                    triggerBeginTime = DateTime.Now.Ticks / 10000;
-
+                    triggerBeginTime = System.DateTime.Now.Ticks;
+                    Console.WriteLine("Begin Waiting for Barcode");
                     //BarcodeNumber.Content = String.Empty;
                 }
                 previousTagIsWaiting = currentTagIsWaiting;
             }
         }
-        public static void WatchTagEdge() // you were missing a return type. I've added void for now
-        {
-            Timer bcTimer;
-            bool CurrentSensorState=false;
-            bool[] readSensorInput;
-            try
-            {
-                //Console.Write(".");
-                if (!modbusClient.Connected) modbusClient.Connect();
-                readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
-                CurrentSensorState = readSensorInput[0];
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("{0} Problem reading modbus sensor.", e);
-                modbusClient = new ModbusClient("192.168.8.45", 502);
-                //open connection to Protos X and get current state of sensor
-                while (modbusClient.Connected) modbusClient.Disconnect();
-                modbusClient.Connect();
-                readSensorInput = modbusClient.ReadDiscreteInputs(0, 1);
-                CurrentSensorState = readSensorInput[0];
-
-            }
-
-            //do nothing if the sensor state has not changed
-            if (CurrentSensorState != PreviousSensorState)
-            {
-                if (CurrentSensorState) Console.Write("+");
-                else Console.Write("-");
-
-                if (CurrentSensorState) edge1Time = DateTime.Now.Ticks/10000;
-                else edge2Time = DateTime.Now.Ticks/10000;
-          //      if (!CurrentSensorState) Console.Write(" - " + (edge2Time - edge1Time).ToString() + " - ");
-                PreviousSensorState = CurrentSensorState;
-
-                //if the sensor was not initialized when the timer was started (i.e., the sensor was over a tag when the timer was started)
-                //then the sensor will be initialized the first time it is over a gap
-                if (SensorInitialized == false & CurrentSensorState == false)
-                {
-                    SensorInitialized = true;
-                }
-                else if (SensorInitialized == true & CurrentSensorState == true)  // over a tag
-                {
-                    if (BarcodeData == null) {
-                        handleBarcode("BAD DATA");
-                        Console.Write("BAD DATA"); 
-                    }
-                    BarcodeData = null;
-                    if ((!triggerIsOn) && (BarcodeReader1.State == ConnectionState.Connected))
-                    {
-                        Console.WriteLine("This might never be called?");
-                        DmccResponse response = BarcodeReader1.SendCommand("TRIGGER ON");
-                        //  Console.WriteLine("Trigger ON");
-                        triggerIsOn = true;
-                    }
-                }
-                else if (SensorInitialized == true & CurrentSensorState == false)  // wait until tag has passed sensor?? -tw
-                {
-
-                }
-            }
-      //      Console.Write("/");
-        }
-
+        
     }
 
 }

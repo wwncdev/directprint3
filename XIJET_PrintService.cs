@@ -136,7 +136,7 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(skipTrigDetect);
         }
 
-        public static void Flush(bool dblWidth, short triggerOffset = 5500)
+        public static void Flush(bool dblWidth, short triggerOffset = 6750)
         {
             int XiJetStatus;
 
@@ -147,8 +147,8 @@ namespace XIJET_PrintService
             if (dblWidth) resParameter = 1; // 600x300 dark
             //            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
-            short headOrientation = 1;
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
+            short headOrientation = 1;  // probably 3 now
+            //XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
             short PrinterQueueDepthValue = 10;
             int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
             //            short printDelay = 2000;
