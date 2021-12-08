@@ -21,9 +21,9 @@ namespace XIJET_PrintService
         private static int LastBitBufferUsed = 0;
         const ushort XIJET_TRIGGER_TYPE = 102;// USHORT - NON-VOL - (see constants below)
         const ushort XIJET_TRIGGER_MASK =   9;		// ULONG -	Mask print trigger for distance (in mils)
-//        static short trigger_mask_value = 5500; // 5.5 inches
+        static short trigger_mask_value = 2600; // 5.5 inches
 //        static short trigger_type_value = 1; // trigger type rising
-        static short triggerOffset = 6500; // 6 inches in mils
+//        static short triggerOffset = 6500; // 6 inches in mils
         public static short inPrintBits = 0;
 
 //        static readonly short trigger_type_value = 1; // trigger type rising
@@ -36,7 +36,6 @@ namespace XIJET_PrintService
             PrinterName = Marshal.AllocHGlobal(8);
             PrinterHandle = IntPtr.Zero;
             IntPtr pPrinterConfig = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.CONFIGURATION)));
-            int XiJetStatus;
 
             Marshal.PrelinkAll( typeof(XIJET)); // Marshal Everything (probably will change to more specific Marshaling)
 
@@ -153,6 +152,7 @@ namespace XIJET_PrintService
         public static void Flush(bool dblWidth, short triggerOffset = 6750)
         {
             int XiJetStatus;
+            IntPtr trigger_mask_value_ptr = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
 
             XIJET.Reset(PrinterHandle);
             short resParameter = 12; // 300x300 normal
@@ -166,9 +166,10 @@ namespace XIJET_PrintService
             short PrinterQueueDepthValue = 20;
             int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
             //            short printDelay = 2000;
-            short trigger_mask_value = 2600;
             short trigger_type_value = 1;
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, &trigger_mask_value);
+            fixed (short* trigger_mask_val_ptr = &trigger_mask_value){
+                XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, trigger_mask_val_ptr);  // new say to make this work?
+            };
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
             // XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
 //            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);

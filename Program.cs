@@ -81,21 +81,10 @@ namespace dp_printer_prod
 
                             tagkey = Console.ReadLine();
                             tagkey = preamble + tagkey;
-                            Console.Write("Tagkey Set to: ");Console.WriteLine(tagkey);
-                            int index = JobSpoolSVC.getItemIndex("UPCA"+tagkey,false);
-                            if (index > 0)
-                            {
-                                JToken item = JobSpoolSVC.job["incomplete_items"][index];
-                                int qty = Int32.Parse((string)item["notprintedqty"]);
-                                Console.Write("I need "); Console.WriteLine(qty);
-                                BarcodeScanner.handleBarcode(tagkey);
-                                BarcodeScanner.BarcodeData = tagkey;
-                                
-                            }
-                            else
-                            {
-                                Console.WriteLine("Tagkey " + tagkey + " Not in this order");
-                            }
+                            int index = JobSpoolSVC.getItemIndex("UPCA"+tagkey,false); 
+                            JobSpoolSVC.AddOneMore("UPCA"+tagkey);
+                            Printer.Flush(dblWidth);
+                            BarcodeScanner.init();
                             break;
                         case 'T':
 //                            BarcodeScanner.simulateTagIsWaiting = true;
@@ -169,6 +158,10 @@ namespace dp_printer_prod
                             VacuumFeed.Abort();
                             Console.WriteLine("Vacuum Feed Abort");
                             break;
+                        case 'Z':
+                            VacuumFeed.setSmallTagMode(true);
+                            Console.WriteLine("Small Tag Mode Enabled");
+                            break;
 
                         default:
                             displayHelp();
@@ -223,10 +216,10 @@ namespace dp_printer_prod
                                 int qty = Int32.Parse((string)item["notprintedqty"]);
                                 int printqty = Int32.Parse((string)item["printqty"]);
                                 int printnumber = printqty - qty;
-                                int lineno = Int32.Parse((string)item["lineno"]);
+                                string  lineno =(string)item["lineno"];
                                 string item_description = (string)item["item_description"];
                                 item_description = item_description.PadRight(40).Remove(35);
-                                Console.WriteLine("LineNo:"+lineno.ToString().PadLeft(5)+" "+item_description+" UPC:" + barcode.barcodeData + " " + 
+                                Console.WriteLine("LineNo:"+lineno.PadLeft(5)+" "+item_description+" UPC:" + barcode.barcodeData + " " + 
                                     printnumber.ToString().PadLeft(5) + " of "+printqty.ToString());
                                 Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
                             }
@@ -257,6 +250,7 @@ namespace dp_printer_prod
             Console.WriteLine("Q - Quit");
             Console.WriteLine("L - Log");
             Console.WriteLine("S - Status");
+            Console.WriteLine("I - Initialize Printer");
             Console.WriteLine("");
 
         }
@@ -396,7 +390,10 @@ namespace dp_printer_prod
                 {
                     var json = r.ReadToEnd();
                     job = JToken.Parse(json);
-                    
+                    string mode = (string)job["mode"];
+                    if (mode == "MPL") VacuumFeed.setSmallTagMode(true);
+                    else VacuumFeed.setSmallTagMode(false);
+                    Console.WriteLine("Job Mode:" + mode);
                     // now add an lookup from tagkey to item
                     JArray items = (JArray)job["incomplete_items"];
                     tag2items.Clear();  // reuse this dictionary so clear it before building on current job.
@@ -458,22 +455,6 @@ namespace dp_printer_prod
             Console.WriteLine("VF TagWaitingStatus:" + VacuumFeed.TagIsWaitingForBarcodeScanner().ToString());
         }
         
-        static int addOneBack(string tagkey)
-        {
-            if (tag2items.ContainsKey(tagkey))
-            {
-                for (int bc = 0; bc < tag2items[tagkey].Count; bc++)
-                {
-                    int index = tag2items[tagkey][bc];
-                    int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
-                    qty++;
-                    job["incomplete_items"][index]["notprintedqty"]= qty;
-                    Console.WriteLine("********    Added an Extra One For You ************");
-                }
-            }
-            return 0;
-        }
-        
         public static int getItemIndex(string tagkey,bool decrement=false)
         {
             // use barcode to find incomplete item in list
@@ -495,7 +476,9 @@ namespace dp_printer_prod
                                 completed_items.Add(job["incomplete_items"][index]);
                                 //JArray incomplete_items = (JArray)job["incomplete_items"];
                                 //tag2items[barcode].Remove(index);
+                                /* since we are now looping through and returning if qty >0 / no need to remote from tag2items
                                 if (tag2items[tagkey].Count == 0) tag2items.Remove(tagkey);
+                                */
                             }
                         }
                         return index;
@@ -514,13 +497,46 @@ namespace dp_printer_prod
         {
             if (tag2items.ContainsKey(lastBarcode))
             {
-                for (int bc = 0; bc < tag2items[lastBarcode].Count; bc++)
+                if (tag2items[lastBarcode].Count > 1)
                 {
-                    Console.WriteLine("Added one to: "+lastBarcode);
-                    int index = tag2items[lastBarcode][bc];
+                    Console.Write("Size Code to Add One More (");
+                    var choices = new List<char>();
+                    for (int bc = 0; bc < tag2items[lastBarcode].Count; bc++)
+                    {
+                        int index = tag2items[lastBarcode][bc];
+                        int sizeCode = Int32.Parse((string)job["incomplete_items"][index]["sizecode"]);
+                        choices.Add(sizeCode.ToString()[0]);
+                    }
+                    Console.Write(String.Join(',', choices.ToArray())+"):");
+                    System.ConsoleKeyInfo keyInfo = Console.ReadKey(true);
+                    char choice='Q';
+                    while (choices.IndexOf(choice) == -1)
+                    {
+                        choice = char.ToUpper(keyInfo.KeyChar);
+                    }
+                    Console.WriteLine(choice);
+                    for (int bc = 0; bc < tag2items[lastBarcode].Count; bc++)
+                    {
+                        //Console.WriteLine("Added one to: "+lastBarcode);
+                        int index = tag2items[lastBarcode][bc];
+                        if (((string)job["incomplete_items"][index]["sizecode"])[0] == choice)
+                        {
+                            int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
+                            int printQty = Int32.Parse((string)job["incomplete_items"][index]["printqty"]);
+                            qty = qty + 1;
+                            job["incomplete_items"][index]["notprintedqty"] = qty;
+                            Console.WriteLine(qty + " of " + printQty);
+                        }
+                    }
+                }
+                else
+                {
+                    int index = tag2items[lastBarcode][0];
                     int qty = Int32.Parse((string)job["incomplete_items"][index]["notprintedqty"]);
+                    int printQty = Int32.Parse((string)job["incomplete_items"][index]["printqty"]);
                     qty = qty + 1;
                     job["incomplete_items"][index]["notprintedqty"] = qty;
+                    Console.WriteLine(qty + " of " + printQty);
                 }
             }
             else
@@ -629,6 +645,10 @@ namespace dp_printer_prod
             }
         }
 
+        public static void setSmallTagMode(bool small = false)
+        {
+            modBusClient.WriteSingleCoil(SmallTagCoil, small);
+        }
         public static void SetSimulateTagIsWaiting(bool waiting)
         {
             simulateTagIsWaiting = waiting;
@@ -663,7 +683,7 @@ namespace dp_printer_prod
             }
             else
             {
-                Console.WriteLine("Vacuum Feeder Disconnected?");
+                //Console.WriteLine("Vacuum Feeder Disconnected?");
                 return false;
             }
         }
@@ -688,7 +708,7 @@ namespace dp_printer_prod
             }
             else
             {
-                Console.WriteLine("Vacuum Feeder Disconnected?");
+                //Console.WriteLine("Vacuum Feeder Disconnected?");
                 return false;
             }
         }
