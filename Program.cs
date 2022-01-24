@@ -35,6 +35,7 @@ namespace dp_printer_prod
             int imageWidth = 192;
             int imageHeight = 640;
             int lastIndex=0;
+            ValueTuple<Int32,Int32> cpos=(0,0);
             string tagkey;
 
             string lastBarcode= "UPCA08723321869";
@@ -116,7 +117,7 @@ namespace dp_printer_prod
                         case 'S':
                             Console.WriteLine("Display Current Status:");
                             JobSpoolSVC.DisplayStatus();
-                            Console.WriteLine("yoffset: " + yoffset.ToString());
+                            //Console.WriteLine("yoffset: " + yoffset.ToString());
                             break;
                         case 'W':
                             JobSpoolSVC.SaveJob();
@@ -206,7 +207,6 @@ namespace dp_printer_prod
                         {
                             var barcode = BarcodeScanner.barcodes.Dequeue();
                             var index = JobSpoolSVC.getItemIndex("UPCA" + barcode.barcodeData, true);
-                            lastIndex = index;
                             lastBarcode = "UPCA" + barcode.barcodeData;
                             //Console.Write("Index: " + index.ToString());
                             //Console.WriteLine("Printing: " + lastBarcode);
@@ -219,6 +219,15 @@ namespace dp_printer_prod
                                 string  lineno =(string)item["lineno"];
                                 string item_description = (string)item["item_description"];
                                 item_description = item_description.PadRight(40).Remove(35);
+                                if (lastIndex != index)
+                                {
+                                    lastIndex = index;
+                                    cpos = Console.GetCursorPosition();
+                                }
+                                else
+                                {
+                                    Console.SetCursorPosition(cpos.Item1, cpos.Item2);
+                                }
                                 Console.WriteLine("LineNo:"+lineno.PadLeft(5)+" "+item_description+" UPC:" + barcode.barcodeData + " " + 
                                     printnumber.ToString().PadLeft(5) + " of "+printqty.ToString());
                                 Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
@@ -393,7 +402,7 @@ namespace dp_printer_prod
                     string mode = (string)job["mode"];
                     if (mode == "MPL") VacuumFeed.setSmallTagMode(true);
                     else VacuumFeed.setSmallTagMode(false);
-                    Console.WriteLine("Job Mode:" + mode);
+                 //   Console.WriteLine("Job Mode:" + mode);
                     // now add an lookup from tagkey to item
                     JArray items = (JArray)job["incomplete_items"];
                     tag2items.Clear();  // reuse this dictionary so clear it before building on current job.
@@ -405,7 +414,7 @@ namespace dp_printer_prod
                         JArray tagkeys = (JArray)item["tagkeys"];  // possible tagkeys for each item
                         // Convert image to go from item to bitmap
                         int index = items.IndexOf(item);  
-                        Console.Write(index.ToString()+",");
+                        //Console.Write(index.ToString()+",");
 //                        Printer.displayHex((string)item["label"]);
                         index2image.Add(index, ConvertImage((string) item["label"]));
                         //Printer.displayBITS2(ConvertImage((string)item["label"]),192,640);
@@ -421,10 +430,10 @@ namespace dp_printer_prod
 
                //     Printer.displayBITS2(index2image[index2], 640 * (Program.dblWidth ? 2 : 1),192);
                     //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
-                    Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
+                //    Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
                     status = "needs_processing";
                 }
-                Console.WriteLine();
+                //Console.WriteLine();
             }
         }
 
@@ -435,24 +444,42 @@ namespace dp_printer_prod
             else str = str.PadRight(l);
             return str;
         }
+
+        public static void DisplayItem(JToken item)
+        {
+            //Console.Write(items.IndexOf(item).ToString().PadLeft(5));
+            Console.Write(": " + Aslen(item["item_description"].ToString(), 60));
+            Console.Write(item["printqty"].ToString().PadLeft(5));
+            Console.Write(((int)item["printqty"] - (int)item["notprintedqty"]).ToString().PadLeft(5));
+            Console.Write(item["notprintedqty"].ToString().PadLeft(5));
+            //    Console.Write("  " + Aslen(item["itemupc"].ToString(), 15));
+            Console.WriteLine();
+        }
         public static void DisplayStatus()
         {
             if (job != null)
             {
 
                 JArray items = (JArray)job["incomplete_items"];
+                Console.WriteLine("Items Completed");
                 foreach (JToken item in items)
                 {
-                    Console.Write(items.IndexOf(item).ToString().PadLeft(5));
-                    Console.Write(": " + Aslen(item["item_description"].ToString(), 60));
-                    Console.Write(item["printqty"].ToString().PadLeft(5));
-                    Console.Write(((int)item["printqty"] - (int)item["notprintedqty"]).ToString().PadLeft(5));
-                    Console.Write(item["notprintedqty"].ToString().PadLeft(5));
-                    //    Console.Write("  " + Aslen(item["itemupc"].ToString(), 15));
-                    Console.WriteLine();
+                    int notPrintedQty = (int)item["notprintedqty"];
+                    int printedQty = (int)item["printqty"] - (int)item["notprintedqty"];
+                    if (notPrintedQty==0) DisplayItem(item);
                 }
+                Console.WriteLine();
+                Console.WriteLine();
+                Console.WriteLine("Items Started But Not Completed");
+                foreach (JToken item in items)
+                {
+                    int notPrintedQty = (int)item["notprintedqty"];
+                    int printedQty=(int)item["printqty"] - (int)item["notprintedqty"];
+                    if ((printedQty > 0) && (notPrintedQty > 0)) DisplayItem(item);
+                }
+               
             }
-            Console.WriteLine("VF TagWaitingStatus:" + VacuumFeed.TagIsWaitingForBarcodeScanner().ToString());
+//            Console.WriteLine("VF TagWaitingStatus:" + VacuumFeed.TagIsWaitingForBarcodeScanner().ToString());
         }
         
         public static int getItemIndex(string tagkey,bool decrement=false)
@@ -574,10 +601,10 @@ namespace dp_printer_prod
             int o= bmp[10] + bmp[11] * 256;
             int imageWidth = bmp[18] + bmp[19] * 256;
             int imageHeight = bmp[22] + bmp[23] * 256;
-            Console.WriteLine("Width:"+imageWidth.ToString()+"  Height:"+imageHeight.ToString());
+            //Console.WriteLine("Width:"+imageWidth.ToString()+"  Height:"+imageHeight.ToString());
             int colorPlanes = bmp[26];
             int bitsPerPixel = bmp[28];
-            Console.WriteLine("ColorPlanes:" + colorPlanes.ToString() + "  bitsPerPixel:" + bitsPerPixel.ToString());
+//            Console.WriteLine("ColorPlanes:" + colorPlanes.ToString() + "  bitsPerPixel:" + bitsPerPixel.ToString());
 
             int numBytes = imageWidth * imageHeight;
             int bytesPerRow = imageWidth / 8;  // this must be evenly divisible by 4 *** shit!
@@ -735,7 +762,7 @@ namespace dp_printer_prod
         public static string lastBarcode;
         public static string mode = "print";  // or test
 
-        static int BarcodeReaderTimeout = 3500;
+        static int BarcodeReaderTimeout = 5500;
         static bool TagAutoMode = true;
 
         public static long triggerBeginTime = 0;
@@ -832,7 +859,7 @@ namespace dp_printer_prod
             var index = JobSpoolSVC.getItemIndex("UPCA" + aBarcode, false);
             if (index >= 0)
             {
-                Console.WriteLine("Handle Barcode Data: " + aBarcode + "  Index:" + index.ToString());
+//                Console.WriteLine("Handle Barcode Data: " + aBarcode + "  Index:" + index.ToString());
                 Tag aTag = new Tag(aBarcode, 0, 0, 0);
                 aTag.barcodeData = aBarcode;
                 barcodes.Enqueue(aTag);
@@ -884,7 +911,7 @@ namespace dp_printer_prod
                             //handleBarcode(BarcodeData);  oops - already handled in readstringarrived.
                             //Console.WriteLine(BarcodeData);
 
-                            Console.WriteLine("timeElapsed:" + timeElapsed.ToString());
+//                            Console.WriteLine("timeElapsed:" + timeElapsed.ToString());
                             if (handleBarcode(BarcodeData))
                             {
                                 if (TagAutoMode) 
@@ -907,7 +934,8 @@ namespace dp_printer_prod
 
                             // BarcodeNumber.Content = "No Read";
                             simulateTagIsWaiting = false;
-                            Console.WriteLine("No Read:"+timeElapsed.ToString());
+                            //                            Console.WriteLine("No Read:"+timeElapsed.ToString());
+                            Console.Beep();
                            // currentTagIsWaiting = false;
                         }
                     }
