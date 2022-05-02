@@ -25,7 +25,7 @@ namespace XIJET_PrintService
 //        static short trigger_type_value = 1; // trigger type rising
 //        static short triggerOffset = 6500; // 6 inches in mils
         public static short inPrintBits = 0;
-
+    //    XIJET.INK_PROFILE inkProfile;
 //        static readonly short trigger_type_value = 1; // trigger type rising
 //        static readonly short trigger_mask_value = 2600; // 2.6 inches
 
@@ -70,6 +70,8 @@ namespace XIJET_PrintService
             //DisplayParams();
             inPrintBits = 0;
             initialized = true;
+            IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
+
             return true;
         }
 
@@ -129,11 +131,7 @@ namespace XIJET_PrintService
             Console.WriteLine("PARAM - PEN_WARMING: " + Marshal.ReadInt16(penWarming));
             Console.WriteLine("PARAM - TRIGGER_MASK: " + Marshal.ReadIntPtr(triggerMask));
             Console.WriteLine("inPrintBits" + inPrintBits.ToString());
-/*            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resVerticalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resVerticalDPI);
-            Console.WriteLine("PARAM - RESOLUTION_DIRECT - resHorizontalDPI: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).resHorizontalDPI);
-            Console.WriteLine("PARAM - RESOLUTION_DIRECT - fastModeFactor: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).fastModeFactor);
-            Console.WriteLine("PARAM - RESOLUTION_DIRECT - bitsPerPixel: " + Marshal.PtrToStructure<XIJET.RESOLUTION_STRUCT>(resolutionDirect).bitsPerPixel);
- */           System.Threading.Thread.Sleep(500);
+            System.Threading.Thread.Sleep(500);
 
             Marshal.FreeHGlobal(resolution);
             Marshal.FreeHGlobal(queueDepth);
@@ -161,7 +159,7 @@ namespace XIJET_PrintService
             if (dblWidth) resParameter = 1; // 600x300 dark
             //            short resParameter = 0; // 600x600
             XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
-            short headOrientation = 1;  // probably 3 now
+            //short headOrientation = 1;  // probably 3 now
             //XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
             short PrinterQueueDepthValue = 20;
             int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
@@ -178,6 +176,17 @@ namespace XIJET_PrintService
 
 
         }
+
+        public static void SetInkVoltage(ushort newVoltage)
+        {
+            XIJET.INK_PROFILE inkp;
+
+            IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
+            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
+            inkp.voltage = newVoltage;
+        //    XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, (short)inkp);
+        }
+
         public static void Close()
         {
             XIJET.ClosePrinter(PrinterHandle);
@@ -185,6 +194,21 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(PrinterName);
             initialized = false;
         }
+
+        public static int WaitForPrintComplete(uint timeout=5000)
+        {
+            int success = XIJET.WaitForPrintComplete(PrinterHandle, timeout);
+            if (success < 1) Console.WriteLine("WaitForPrintComplete error");
+            return success;
+        }
+
+        public static int ActivateInkPurge()
+        {
+            byte mode = (byte) XIJET.Purge_mode.PMT_MODE_SPIT;
+            int success = XIJET.ActivateInkPurge(PrinterHandle,mode,300,0,0,0);
+            return success;
+        }
+
 
         public static bool PrintBits(byte[] Bits,int imageWidth=640,int imageHeight=192,int yoffset=0)
         {
@@ -199,8 +223,9 @@ namespace XIJET_PrintService
                 int XiJetStatus = 0;
                 while (XiJetStatus == 0) // keep printing from internal queue until status changes
                 {
-                    Console.Write("*");
+                    //Console.Write("*");
                     XiJetStatus = XIJET.CanvasPrint(PrinterHandle, 0, 1200, 0, 0, 100);
+                    //Console.WriteLine("XiJetStatus:" + XiJetStatus.ToString());
                     
                 }
                 // Console.WriteLine("After Canvas Print Loop");

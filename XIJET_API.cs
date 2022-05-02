@@ -246,6 +246,33 @@ namespace XIJET_API
         [DllImport("res/XIJET_API.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "XIJET_GetStatus")]
         public static extern int GetStatus(IntPtr printerHandle, IntPtr pStatusMessage);
 
+        [DllImport("res/XIJET_API.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "XIJET_ActivateInkPurge")]
+        public static extern int ActivateInkPurge( IntPtr printerHandle, 
+                                                   byte purgeMode,
+                                                   UInt32 purgeParameter1 = 0,
+                                                   UInt32 purgeParameter2 = 0,
+                                                   UInt32 purgeParameter3 = 0,
+                                                   UInt32 purgeParameter4 = 0);
+                                                                                                      
+        //
+        //	XIJET_ActivateInkPurge
+        //
+        //	the only call still supported is a 1-time ejection of drops
+        //
+        //	To expel 200 drops per nozzle, the call is:
+        //
+        //  XIJET_ActivateInkPurge( printerHandle, PMT_MODE_SPIT, 200, 0, 0, 0);
+        //
+        /*int WINAPI XIJET_ActivateInkPurge(HANDLE printerHandle,
+                                           UCHAR purgeMode,
+                                           ULONG purgeParameter1 = 0,
+                                           ULONG purgeParameter2 = 0,
+                                           ULONG purgeParameter3 = 0,
+                                           ULONG purgeParameter4 = 0
+                                           );
+        */
+
+
         [DllImport("res/XIJET_API.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "XIJET_GetInkRemaining")]
         public static extern int GetInkRemaining(IntPtr printerHandle,
                                                  ushort headIndex,
