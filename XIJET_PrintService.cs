@@ -104,7 +104,7 @@ namespace XIJET_PrintService
 
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION, resolution);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, queueDepth);
-            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
+        //    XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.JET_BLANKING, jetBlanking);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.AUX_OUTPUT, auxOutput);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
@@ -149,6 +149,7 @@ namespace XIJET_PrintService
 
         public static void Flush(bool dblWidth, short triggerOffset = 6750)
         {
+            IntPtr _param = IntPtr.Zero;
             int XiJetStatus;
             IntPtr trigger_mask_value_ptr = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
 
@@ -157,18 +158,21 @@ namespace XIJET_PrintService
          //   short resParameter = 7; // 300x300 dark
                                      //           resParameter = 0; // 300x300 Fast
             if (dblWidth) resParameter = 1; // 600x300 dark
-            //            short resParameter = 0; // 600x600
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, &resParameter);
+                                            //            short resParameter = 0; // 600x600
+            _param = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UInt32))); //unmanaged intptr
+            Marshal.WriteIntPtr(_param, new IntPtr(resParameter));
+
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 0, _param);
             //short headOrientation = 1;  // probably 3 now
             //XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 100, &headOrientation);
-            short PrinterQueueDepthValue = 20;
-            int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
+            //short PrinterQueueDepthValue = 20;
+            //int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
             //            short printDelay = 2000;
-            short trigger_type_value = 1;
-            fixed (short* trigger_mask_val_ptr = &trigger_mask_value){
-                XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, trigger_mask_val_ptr);  // new say to make this work?
-            };
-            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
+            //short trigger_type_value = 1;
+            //fixed (short* trigger_mask_val_ptr = &trigger_mask_value){
+            //    XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, trigger_mask_val_ptr);  // new say to make this work?
+            //};
+            //XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
             // XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
 //            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
 
@@ -177,14 +181,38 @@ namespace XIJET_PrintService
 
         }
 
-        public static void SetInkVoltage(ushort newVoltage)
+        
+        public static void SetInkVoltage(short newVoltage)
         {
-            XIJET.INK_PROFILE inkp;
+            int result;
 
+            // get ink profile into unmanaged memory
             IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
-            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
-            inkp.voltage = newVoltage;
-        //    XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, (short)inkp);
+            result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
+
+            if (result == 1)
+            {
+                // copy ink profile to managed memory
+                XIJET.INK_PROFILE inkp;
+                inkp = (XIJET.INK_PROFILE)Marshal.PtrToStructure(inkProfile, typeof(XIJET.INK_PROFILE));
+                
+                // modify the ink profile
+                inkp.voltage = (ushort)(inkp.voltage + newVoltage);
+                  
+                // copy the modified ink profile back to unmanaged memory and set it
+                Marshal.StructureToPtr(inkp, inkProfile, false);
+                result = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
+                
+                // test if that worked.
+                result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
+
+                Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
+                Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
+                Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
+                Console.WriteLine("PARAM - INK_PROFILE - temperature: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).temperature);
+                Console.WriteLine("PARAM - INK_PROFILE - voltage: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).voltage);
+                Marshal.FreeHGlobal(inkProfile);
+            }
         }
 
         public static void Close()
@@ -204,7 +232,7 @@ namespace XIJET_PrintService
 
         public static int ActivateInkPurge()
         {
-            byte mode = (byte) XIJET.Purge_mode.PMT_MODE_SPIT;
+            byte mode = (byte) XIJET.PURGE_MODE.SPIT;
             int success = XIJET.ActivateInkPurge(PrinterHandle,mode,300,0,0,0);
             return success;
         }

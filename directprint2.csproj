@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="bak_EasyModbus.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Cognex.Dataman.SDK.PC">
+      <HintPath>Cognex.Dataman.SDK.PC.dll</HintPath>
+    </Reference>
+    <Reference Include="EasyModbus">
+      <HintPath>EasyModbus.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="System.IO.Ports" Version="4.7.0" />
+    <PackageReference Include="System.ComponentModel.EventBasedAsync" Version="4.3.0" />
+    <PackageReference Include="System.Drawing.Common" Version="4.7.0" />
+    <PackageReference Include="System.Speech" Version="6.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="res\XIJET_API.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

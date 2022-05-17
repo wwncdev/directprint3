@@ -67,7 +67,7 @@ namespace dp_printer_prod
             if (BarcodeReader1.State == ConnectionState.Connected)
             {
                 //                            Console.WriteLine("TRIGGER OFF");
-                BarcodeReader1.SendCommand("SET CAMERA.EXPOSURE 162");
+                //BarcodeReader1.SendCommand("SET CAMERA.EXPOSURE 162");
             }
 
         }
@@ -122,7 +122,7 @@ namespace dp_printer_prod
                 retry--;
                 if (BarcodeData == "NO READ")
                 {
-                    Console.Write("*");
+                    Console.WriteLine("Barcode Scanner: No Read");
                 }
             }
             while ((BarcodeData == "NO READ") && (retry > 0));

@@ -2,7 +2,7 @@
   "profiles": {
     "dp_printer_prod": {
       "commandName": "Project",
-      "commandLineArgs": "dblWidth=false"
+      "commandLineArgs": "printerNumber=2"
     }
   }
 }

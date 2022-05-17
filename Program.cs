@@ -231,20 +231,11 @@ namespace dp_printer_prod
                         Printer.DisplayParams();
                         break;
                     case '-':
-                        yoffset -= 5;
-                        if (yoffset < 0) yoffset = 0;
-                        Console.WriteLine("yoffset: " + yoffset.ToString());
-                        JobSpoolSVC.settings["yoffset"] = yoffset;
-                        JobSpoolSVC.SaveSettings();
-                        //                          System.Threading.Thread.Sleep(500);
+                        Printer.SetInkVoltage(-2);
                         break;
                     case '+':
                     case '=':
-                        yoffset += 5;
-                        Console.WriteLine("yoffset: " + yoffset.ToString());
-                        JobSpoolSVC.settings["offset"] = yoffset;
-                        JobSpoolSVC.SaveSettings();
-                        //                          System.Threading.Thread.Sleep(500);
+                        Printer.SetInkVoltage(2);
                         break;
                     case 'I':
                         Console.WriteLine("Init Printer and Barcode Scanner");
