@@ -23,6 +23,7 @@ namespace dp_printer_prod
         //public static SpVoice voice;
         public static String LastFileName;
         public static int lastIndex = -1;
+        public static bool ignoreAddedJobs = false;
 
         //static DPsys dpsys;
         public static Dictionary<string, List<int>> tag2items = new Dictionary<string, List<int>>();  // needs cleaned up at end of job?
@@ -87,6 +88,7 @@ namespace dp_printer_prod
         }
         private static void CheckSpoolDirEvent(Object source, ElapsedEventArgs e)
         {
+            if (ignoreAddedJobs) return;
             string[] fileEntries = Directory.GetFiles(spooldir, @"*.json");
             if (fileEntries.Length > 0)
             {
@@ -105,6 +107,11 @@ namespace dp_printer_prod
                     string mode = (string)job["mode"];
                     // now add an lookup from tagkey to item
                     JArray items = (JArray)job["incomplete_items"];
+                    if (tag2items.Count() > 0)
+                    {
+                        Console.Beep();
+                        Console.WriteLine("New Job replacing old job");
+                    };
                     tag2items.Clear();  // reuse this dictionary so clear it before building on current job.
                     index2image.Clear();
                     goatImage = ConvertImage((string)job["goat"]);
@@ -133,6 +140,7 @@ namespace dp_printer_prod
                     //voice.Speak("Job for order number "+job["orderkey"].ToString()+" is ready for processing. Please turn on conveyor belt and load plant tags", SpeechVoiceSpeakFlags.SVSFlagsAsync);
                         Console.WriteLine("Index to Image Contains:" + index2image.Count.ToString());
                     status = "needs_processing";
+                    ignoreAddedJobs = true;
                 }
                 //Console.WriteLine();
             }
@@ -146,6 +154,10 @@ namespace dp_printer_prod
             return str;
         }
 
+        public static void StopIgnoringJobs()
+        {
+            ignoreAddedJobs = false;
+        }
         public static void DisplayItem(JToken item)
         {
             //Console.Write(items.IndexOf(item).ToString().PadLeft(5));

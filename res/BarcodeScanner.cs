@@ -33,7 +33,6 @@ namespace dp_printer_prod
         public static string lastBarcode;
         public static string mode = "print";  // or test
 
-        static int BarcodeReaderTimeout = 5500;
         static bool TagAutoMode = true;
 
         public static long triggerBeginTime = 0;

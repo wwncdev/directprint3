@@ -24,6 +24,8 @@ namespace dp_printer_prod
         public static int yoffset = 0;
         public static bool dblWidth = false;
         public static int printerNumber = 1;
+        public static int feednscan = 1;
+        public static int spooldir = 1;
         public static int tagsPerBang = 0;
         public static int tagsOnBelt = 0;
         public static int extraTags = 0;
@@ -42,13 +44,14 @@ namespace dp_printer_prod
             synthesizer.SetOutputToDefaultAudioDevice();
 
 
-            JobSpoolSVC.Start(Program.printerNumber);
+            JobSpoolSVC.Start(Program.spooldir);
             JobSpoolSVC.watchSpool();
 
 
 
             Console.WriteLine("Printer Number:" + printerNumber.ToString());
-            switch (printerNumber)
+            Console.WriteLine("Feed-n-scan :" + feednscan.ToString());
+            switch (feednscan)
             {
                 case 1:
                     VacuumFeed.Start("192.168.8.45");
@@ -59,7 +62,7 @@ namespace dp_printer_prod
                     BarcodeScanner.Start("192.168.8.48");
                     break;
             }
-            Printer.Init(Program.dblWidth);
+            Printer.Init(printerNumber, Program.dblWidth);
 
             //            JobSpoolSVC.ReadSettings();
             while (!doneProcessing)
@@ -76,12 +79,19 @@ namespace dp_printer_prod
                         var index = JobSpoolSVC.getItemIndex("UPCA" + barcode, true);
                         if (index >= 0) // is barcode in the order
                         {
+                            if (index != lastIndex)
+                            {
+                                Console.Write("Pause while tag clears printhead....");
+                                System.Threading.Thread.Sleep(1500);
+                                Console.WriteLine("buffer flushed");
+                                Printer.Flush(dblWidth);
+                            }
                             VacuumFeed.Continue();
                             // need to print the tag
                             bool success;
                             do
                             {
-                              UpdateConsole(index,barcode);
+                              UpdateConsole(index,barcode);  // this updates lastIndex
                               success = Printer.PrintBits(JobSpoolSVC.index2image[index], imageWidth * (Program.dblWidth ? 2 : 1), imageHeight, yoffset);
                             } while (!success);
                         }
@@ -89,13 +99,8 @@ namespace dp_printer_prod
                         {
                             VacuumFeed.Abort();
                             VacuumFeed.haltPlacer();
-                            //synthesizer.Speak("Rosa, I cannot find that one or there are too many");
-
-//                            Console.Beep();Console.Beep();Console.Beep();
-                            
                             Console.WriteLine("Barcode: " + barcode + " - Not in list or too many?");
                         }
-
                     }
                     else
                     {
@@ -156,6 +161,12 @@ namespace dp_printer_prod
                     case "printerNumber":
                         printerNumber = int.Parse(arg.Split("=")[1]);
                         break;
+                    case "feednscan":
+                        feednscan = int.Parse(arg.Split("=")[1]);
+                        break;
+                    case "spooldir":
+                        spooldir = int.Parse(arg.Split("=")[1]);
+                        break;
                     default:
                         Console.WriteLine("Error above argument not recognized");
                         break;
@@ -206,6 +217,7 @@ namespace dp_printer_prod
                     case 'E':
                         // end processing current job
                         JobSpoolSVC.status = "Starting";
+                        JobSpoolSVC.StopIgnoringJobs();
                         Console.WriteLine("Processing of Job ended.");
                         break;
                     case 'F':
@@ -292,12 +304,5 @@ namespace dp_printer_prod
             //Console.Write(DateTime.Now.ToLongTimeString());
             //Console.WriteLine(": " + msg);
         }
-
-    }
-
-    
-
- 
-
- 
+    } 
 }

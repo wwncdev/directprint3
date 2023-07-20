@@ -16,21 +16,14 @@ namespace XIJET_PrintService
         public static IntPtr PrinterHandle;
         public static IntPtr PrinterName;
         private static byte[][] Bits = new byte[4][];
-        private static readonly int BitsSize = 25600;
-//        private static byte[,] Bits = new byte[4,25600];
         private static int LastBitBufferUsed = 0;
         const ushort XIJET_TRIGGER_TYPE = 102;// USHORT - NON-VOL - (see constants below)
         const ushort XIJET_TRIGGER_MASK =   9;		// ULONG -	Mask print trigger for distance (in mils)
         static short trigger_mask_value = 2600; // 5.5 inches
-//        static short trigger_type_value = 1; // trigger type rising
-//        static short triggerOffset = 6500; // 6 inches in mils
         public static short inPrintBits = 0;
-    //    XIJET.INK_PROFILE inkProfile;
-//        static readonly short trigger_type_value = 1; // trigger type rising
-//        static readonly short trigger_mask_value = 2600; // 2.6 inches
 
 
-        public static bool Init(bool dblWidth=false)
+        public static bool Init(int printerNumber, bool dblWidth=false)
         {
             // set up printer name buffer for extern function to modify (gross)
             PrinterName = Marshal.AllocHGlobal(8);
@@ -39,13 +32,13 @@ namespace XIJET_PrintService
 
             Marshal.PrelinkAll( typeof(XIJET)); // Marshal Everything (probably will change to more specific Marshaling)
 
-            XIJET.OpenLogFile(new StringBuilder("xijet.log"));
+            XIJET.OpenLogFile(new StringBuilder("xijet"+printerNumber.ToString()+".log"));
 
             /////////////////
             // PROBE PRINTER
             /////////////////
             // extern probe printer function, modifies printer name buffer and returns boolean
-            if (XIJET.ProbePrinter(0, PrinterName ) == false)
+            if (XIJET.ProbePrinter(printerNumber-1, PrinterName ) == false)
             {
                 Console.WriteLine("No printers found");
                 return false;
@@ -70,7 +63,7 @@ namespace XIJET_PrintService
             //DisplayParams();
             inPrintBits = 0;
             initialized = true;
-            IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
+            //IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
 
             return true;
         }
@@ -169,16 +162,13 @@ namespace XIJET_PrintService
             //int success = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, &PrinterQueueDepthValue);
             //            short printDelay = 2000;
             //short trigger_type_value = 1;
-            //fixed (short* trigger_mask_val_ptr = &trigger_mask_value){
-            //    XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, trigger_mask_val_ptr);  // new say to make this work?
-            //};
-            //XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_TYPE, &trigger_type_value);
-            // XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, 14, &printDelay);
-//            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, &triggerOffset);
 
-  //          Console.WriteLine("Trigger offset value " + triggerOffset.ToString());
+            IntPtr tmask = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(UInt32)));
+            Marshal.WriteIntPtr(tmask, new IntPtr(trigger_mask_value));
 
-
+            XiJetStatus = XIJET.SetPrinterParameter(PrinterHandle, XIJET_TRIGGER_MASK, tmask);  // new say to make this work?
+            Marshal.FreeHGlobal(tmask);
+            Marshal.FreeHGlobal(_param);
         }
 
         
@@ -206,9 +196,9 @@ namespace XIJET_PrintService
                 // test if that worked.
                 result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
 
-                Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
-                Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
-                Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
+                //Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
+                //Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
+                //Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
                 Console.WriteLine("PARAM - INK_PROFILE - temperature: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).temperature);
                 Console.WriteLine("PARAM - INK_PROFILE - voltage: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).voltage);
                 Marshal.FreeHGlobal(inkProfile);
