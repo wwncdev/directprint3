@@ -49,7 +49,7 @@ namespace dp_printer_prod
 
 
 
-            Console.WriteLine("Printer Number:" + printerNumber.ToString());
+            Console.WriteLine("Printer Number:" + printerNumber.ToString()); 
             Console.WriteLine("Feed-n-scan :" + feednscan.ToString());
             switch (feednscan)
             {
@@ -269,6 +269,15 @@ namespace dp_printer_prod
                         Console.WriteLine("Placer will Stop");
                         break;
 
+                    case ',':
+                    case '<':
+                        Printer.SetTriggerOffset(-250);
+                        break;
+                    case '.':
+                    case '>':
+                        Printer.SetTriggerOffset(250);
+                        break;
+
                     default:
                         displayHelp();
                         break;
@@ -283,6 +292,10 @@ namespace dp_printer_prod
             Console.WriteLine("L - Log");
             Console.WriteLine("S - Status");
             Console.WriteLine("I - Initialize Printer");
+            Console.WriteLine("+/-  Adjust ink voltage");
+            Console.WriteLine("<,> - Adjust trigger offset");
+            Console.WriteLine("E - End Job");
+
             Console.WriteLine("");
 
         }

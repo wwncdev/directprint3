@@ -97,7 +97,6 @@ namespace XIJET_PrintService
 
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION, resolution);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.QUEUE_DEPTH, queueDepth);
-        //    XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SUB_SAMPLE, subSample);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.JET_BLANKING, jetBlanking);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.AUX_OUTPUT, auxOutput);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
@@ -105,7 +104,6 @@ namespace XIJET_PrintService
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.PEN_WARMING, penWarming);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_MASK, triggerMask);
-//            XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.RESOLUTION_DIRECT, resolutionDirect);
             XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.SKIP_TRIG_DETECT, skipTrigDetect);
 
             Console.WriteLine("PARAM - RESOLUTION: " + Marshal.ReadInt16(resolution));
@@ -171,6 +169,20 @@ namespace XIJET_PrintService
             Marshal.FreeHGlobal(_param);
         }
 
+        public static void SetTriggerOffset(short offset)
+        {
+            int result;
+
+            IntPtr triggerOffsetptr = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(ushort)));
+            result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.TRIGGER_OFFSET, triggerOffsetptr);
+            short triggerOffset = Marshal.ReadInt16(triggerOffsetptr); 
+            triggerOffset += offset;
+            Marshal.WriteIntPtr(triggerOffsetptr, new IntPtr(triggerOffset));
+
+            result = XIJET.SetPrinterParameter(PrinterHandle, (ushort) XIJET.Params.TRIGGER_OFFSET,triggerOffsetptr);
+            Console.Write("Trigger Offset:");
+            Console.WriteLine(triggerOffset);
+        }
         
         public static void SetInkVoltage(short newVoltage)
         {
@@ -179,7 +191,6 @@ namespace XIJET_PrintService
             // get ink profile into unmanaged memory
             IntPtr inkProfile = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(XIJET.INK_PROFILE)));  // *** guessing this needs updating
             result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
-
             if (result == 1)
             {
                 // copy ink profile to managed memory
@@ -196,9 +207,6 @@ namespace XIJET_PrintService
                 // test if that worked.
                 result = XIJET.GetPrinterParameter(PrinterHandle, (ushort)XIJET.Params.INK_PROFILE, inkProfile);
 
-                //Console.WriteLine("PARAM - INK_PROFILE - preFirePulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).preFirePulseWidth);
-                //Console.WriteLine("PARAM - INK_PROFILE - gapWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).gapWidth);
-                //Console.WriteLine("PARAM - INK_PROFILE - pulseWidth: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).pulseWidth);
                 Console.WriteLine("PARAM - INK_PROFILE - temperature: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).temperature);
                 Console.WriteLine("PARAM - INK_PROFILE - voltage: " + Marshal.PtrToStructure<XIJET.INK_PROFILE>(inkProfile).voltage);
                 Marshal.FreeHGlobal(inkProfile);
